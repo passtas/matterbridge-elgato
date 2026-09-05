@@ -14,7 +14,7 @@ answer to voice. Switching the office off at the end of the day means walking
 back in or waking the PC. This makes them ordinary Matter lights, owned by the
 home app that is already on the phone.
 
-<p align="center"><img src="https://raw.githubusercontent.com/passtas/matterbridge-elgato/main/docs/assets/google-home.png" width="260" alt="Two Elgato lights in a Google Home room, with the group brightness slider, the color temperature presets and a tile per light"> &nbsp; <img src="https://raw.githubusercontent.com/passtas/matterbridge-elgato/main/docs/assets/matterbridge-frontend.png" width="560" alt="The Matterbridge frontend, showing the plugin row and the two bridged lights"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/passtas/matterbridge-elgato/main/docs/assets/google-home.png" width="200" alt="Two Elgato lights in a Google Home room, with the group brightness slider, the color temperature presets and a tile per light"> &nbsp; <img src="https://raw.githubusercontent.com/passtas/matterbridge-elgato/main/docs/assets/matterbridge-frontend.png" width="400" alt="The Matterbridge frontend, showing the plugin row and the two bridged lights"></p>
 
 Left: both lights in a Google Home room. Right: the Matterbridge frontend, where
 the pairing code and the plugin config live.
