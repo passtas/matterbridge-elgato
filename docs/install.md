@@ -1,8 +1,30 @@
 # Install notes
 
-The three install paths are in the [README](../README.md#install). This page has
-the details that would make it twice as long: the Docker Desktop caveat, the full
-flag reference for the setup command, and per-NAS notes.
+The two install paths are in the
+[README](../README.md#two-ways-to-install). This page has the details that would
+make it twice as long: the full requirements, the Docker Desktop caveat, the
+compose file, the flag reference for the setup command, per-NAS notes, and how to
+update.
+
+## What the bundle needs, in full
+
+- **An always-on Linux machine with Docker**, on the same LAN as the lights. A
+  home server, a NAS that runs Docker (Synology, QNAP, Unraid), or a Raspberry
+  Pi. The bridge only works while that machine is on.
+- **Host networking for the container.** Matter and mDNS both work over
+  multicast, which does not cross a Docker bridge network, so the container has
+  to share the host's network stack.
+- **IPv6 enabled on the LAN.** Matter talks IPv6 locally. Your internet
+  connection does not need it, your router's LAN does.
+- **A Matter controller**: a Nest hub or Nest Wifi point for Google Home, a
+  HomePod or an Apple TV for Apple Home, an Echo (4th generation or newer) for
+  Alexa.
+- **The lights on the same LAN as the host.** A separate IoT VLAN needs mDNS
+  reflection between the two, or the manual address list in
+  [configuration.md](configuration.md).
+
+Installing into a Matterbridge you already run has none of these constraints
+beyond the last one: whatever that Matterbridge needed, it already has.
 
 ## Docker Desktop on macOS and Windows will not do
 
@@ -82,6 +104,59 @@ output. `--no-start` writes the files without starting the stack, which is how
 you generate a stack on one machine and copy it to another. It still looks for
 Docker, so it reports what the target host would need.
 
+## The compose file
+
+This is exactly what the setup command writes, so you can also skip the command
+and write it yourself.
+
+```yaml
+# Written by `npx matterbridge-elgato setup`. Safe to edit and re-run.
+services:
+  matterbridge-elgato:
+    image: ghcr.io/passtas/matterbridge-elgato:latest
+    container_name: matterbridge-elgato
+    # Mandatory: Matter and mDNS both need the host network, and so does the
+    # plugin's own _elg._tcp discovery of the Elgato lights.
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      # The LAN interface Matter advertises on. Docker hosts always have several
+      # interfaces; naming the right one is what makes the bridge discoverable.
+      MDNS_INTERFACE: eth0
+      FRONTEND_PORT: "8283"
+      TZ: Europe/London
+    volumes:
+      - ./data/.matterbridge:/root/.matterbridge
+      - ./data/Matterbridge:/root/Matterbridge
+      - ./data/.mattercert:/root/.mattercert
+```
+
+`docker compose up -d`, then open `http://<host-ip>:8283`.
+
+## Updating, and what to back up
+
+In the directory the setup command created:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Re-running `setup` in the same directory is safe, but it does not pull a newer
+image on its own, so use the two commands above to update. A plugin installed
+into an existing Matterbridge is updated from that frontend's Install plugins
+panel instead, followed by a restart.
+
+The three mounted directories under `data/` are everything the bridge remembers:
+
+- `.matterbridge` holds the Matter commissioning data (the fabrics your
+  controllers created) and the plugin config. This is the one to back up. Lose it
+  and every controller has to pair again.
+- `Matterbridge` is the plugin directory, including the pinned device names.
+- `.mattercert` holds the frontend's TLS certificates.
+
+Back up `.matterbridge` before any `--factoryreset`.
+
 ## NAS notes
 
 The only thing that ever needs attention on a NAS is host networking. If the
@@ -93,15 +168,15 @@ controllers will not see the bridge.
 container's network settings choose the host network rather than the default
 bridge. Put the data folder on a shared folder that is not backed by an eSATA or
 USB volume, for example `/volume1/docker/matterbridge-elgato/data`, and mount its
-three subfolders the way the README's Compose example does. `MDNS_INTERFACE`
+three subfolders the way the compose file above does. `MDNS_INTERFACE`
 goes in the environment section of the same dialog. Synology boxes usually have
 several interfaces, so name the one with the LAN address.
 
 **QNAP (Container Station).** Same shape: pull the image, and in the container's
 network settings choose host. Keep the data under a share such as
 `/share/Container/matterbridge-elgato/data`. Environment variables are set in the
-same creation dialog. Container Station can also import the README's compose
-file, which is less clicking and easier to redo.
+same creation dialog. Container Station can also import the compose file above,
+which is less clicking and easier to redo.
 
 **Unraid.** There is no community template yet. Add the container by hand, set
 the network type to host, and add `MDNS_INTERFACE` as a variable. Use

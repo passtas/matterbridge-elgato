@@ -15,7 +15,23 @@ against real hardware, so they outrank anything you remember. Never add
 
 ## Installing it for a user
 
-Ask this first, before running anything, and wait for the answer:
+First, check whether Matterbridge is already on this machine. If it is, the
+install is one click and none of the Docker work below applies.
+
+```sh
+docker ps --format '{{.Names}}' | grep -i matterbridge
+curl -s -o /dev/null -w '%{http_code}' http://localhost:8283/
+```
+
+If a container named `matterbridge` is running, or port 8283 answers, tell the
+user you found their Matterbridge and install the plugin there: open the frontend
+at `http://<host>:8283`, go to Install plugins, search `matterbridge-elgato`,
+install it, restart Matterbridge. It needs Matterbridge 3.10.0 or newer. The
+lights appear under the bridge they already paired, so there is no new pairing
+step. Skip to the troubleshooting notes at the bottom.
+
+Otherwise you are installing the bundle, which is Matterbridge and this plugin in
+one container. Ask this before running anything, and wait for the answer:
 
 > This runs best on an always-on Linux box with Docker: a home server, NAS, or
 > Raspberry Pi. If you're installing on your laptop or desktop, I'd need to
@@ -46,6 +62,10 @@ Then:
 
 4. Confirm with `npx matterbridge-elgato@latest status`. The lights show up in
    the app within a minute of pairing.
+
+To update the bundle later: `docker compose pull && docker compose up -d` in the
+directory `setup` created. Re-running `setup` there is safe but does not pull a
+new image.
 
 When something goes wrong:
 

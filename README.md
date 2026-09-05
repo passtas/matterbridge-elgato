@@ -1,164 +1,112 @@
 # matterbridge-elgato
 
-Elgato lights in Google Home, Apple Home and Alexa. One Docker container, no
-cloud, no account.
+**Your Elgato lights in Google Home, Apple Home and Alexa.**
 
-## The problem
+[![npm](https://img.shields.io/npm/v/matterbridge-elgato?logo=npm&color=cb3837)](https://www.npmjs.com/package/matterbridge-elgato)
+[![release](https://img.shields.io/github/v/release/passtas/matterbridge-elgato?logo=github)](https://github.com/passtas/matterbridge-elgato/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/passtas/matterbridge-elgato/ci.yml?branch=main&logo=githubactions&logoColor=white&label=CI)](https://github.com/passtas/matterbridge-elgato/actions/workflows/ci.yml)
+[![container](https://img.shields.io/badge/ghcr.io-matterbridge--elgato-2496ed?logo=docker&logoColor=white)](https://github.com/passtas/matterbridge-elgato/pkgs/container/matterbridge-elgato)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-Elgato's Key Lights and Light Strips are controlled from Control Center, which is
-a separate app on a phone or a PC. So a Key Light cannot join a room with the
-rest of the lights, cannot be part of a routine or a schedule, and does not
-answer to a voice command. Turning the office lights off means walking to the
-office or waking the PC up first. This bridge makes them ordinary Matter lights,
-so the home app that is already on the phone controls them like any other bulb.
+Elgato's Key Lights live in Control Center, and Control Center is an island. They
+cannot join a room, cannot be in a routine, cannot be on a schedule, and do not
+answer to voice. Switching the office off at the end of the day means walking
+back in or waking the PC. This makes them ordinary Matter lights, owned by the
+home app that is already on the phone.
 
-![Two Elgato lights in a Google Home room, with the group brightness slider, the color temperature presets and a tile per light](docs/assets/google-home.png)
+<p align="center"><img src="https://raw.githubusercontent.com/passtas/matterbridge-elgato/main/docs/assets/google-home.png" width="260" alt="Two Elgato lights in a Google Home room, with the group brightness slider, the color temperature presets and a tile per light"> &nbsp; <img src="https://raw.githubusercontent.com/passtas/matterbridge-elgato/main/docs/assets/matterbridge-frontend.png" width="560" alt="The Matterbridge frontend, showing the plugin row and the two bridged lights"></p>
 
-Two Elgato lights in a Google Home room, driven through this bridge.
+Left: both lights in a Google Home room. Right: the Matterbridge frontend, where
+the pairing code and the plugin config live.
 
-## What you get
+## Two ways to install
 
-- On, off, brightness and color temperature on the Key Lights. On, off,
-  brightness and color on the Light Strip.
-- Rooms, groups, routines, schedules and voice control, in whichever app you
-  already use. The bridge does none of that itself, the controller does. The
-  lights just become normal devices it can drive.
-- Local only. The lights speak HTTP on the LAN, the bridge speaks Matter on the
-  LAN, and nothing leaves the house. There is no Elgato account and no cloud
-  service in the path.
-- Auto-discovery. Lights are found over mDNS and appear on their own. The
-  registry is keyed by serial number, so a new DHCP address does not produce a
-  duplicate device. There is a manual address list for networks that filter
-  multicast.
-- Three controllers at once. Matter multi-admin means the same bridge can be
-  paired with Google Home, Apple Home and Alexa at the same time.
+### Already running Matterbridge
 
-Everything runs inside [Matterbridge](https://github.com/Luligu/matterbridge),
-which presents one bridge to the controllers and gives you a web frontend for the
-pairing code, the plugin config and the device list.
-[docs/how-it-works.md](docs/how-it-works.md) has the detail, and the limits.
+Open your frontend, go to Install plugins, type `matterbridge-elgato`, click
+Install, restart. That is the whole install.
 
-## Requirements
+The lights turn up on their own, under the bridge you already paired. Same
+bridge, same fabrics, same frontend, two more endpoints. Needs Matterbridge
+3.10.0 or newer.
 
-- **An always-on Linux machine with Docker**, on the same LAN as the lights. A
-  home server, a NAS that runs Docker (Synology, QNAP, Unraid), or a Raspberry
-  Pi. The bridge only works while that machine is on.
-- **Host networking for the container.** Matter and mDNS both work over
-  multicast, which does not cross a Docker bridge network, so the container has
-  to share the host's network stack.
-- **Not Docker Desktop.** On macOS and Windows it runs Docker inside a VM, where
-  `--network host` is the VM's network and not your LAN, so nothing is discovered
-  and nothing pairs.
-  [More on that](docs/install.md#docker-desktop-on-macos-and-windows-will-not-do).
-- **IPv6 enabled on the LAN.** Matter talks IPv6 locally. Your internet
-  connection does not need it, your router's LAN does.
-- **A Matter controller**: a Nest hub or Nest Wifi point for Google Home, a
-  HomePod or an Apple TV for Apple Home, an Echo (4th generation or newer) for
-  Alexa.
-- The lights on the same LAN as the host. A separate IoT VLAN needs mDNS
-  reflection between the two, or the manual address list in
-  [docs/configuration.md](docs/configuration.md).
+### Starting from nothing: take the bundle
 
-## Install
-
-Three ways in, all ending at the same container.
-
-### 1. The setup command
+One container, with Matterbridge and this plugin already inside it.
 
 ```bash
 npx matterbridge-elgato@latest setup
 ```
 
-It checks Docker, picks the network interface that faces your LAN, writes
-`./matterbridge-elgato/docker-compose.yml`, starts the stack, and prints the
-frontend URL and the pairing code. Two more commands use the same `--dir`:
-`status` prints whether the stack is running plus the last pairing code, and
-`logs` tails the container log.
+- finds Docker, and the interface that faces your LAN, asking you only if more
+  than one could be it,
+- writes `./matterbridge-elgato/docker-compose.yml` and starts the stack,
+- prints the frontend URL, the QR code link and the manual pairing code.
 
-The full flag reference, a sample run, `--json` for scripts and agents, and
-notes for Synology, QNAP, Unraid and Raspberry Pi are in
-[docs/install.md](docs/install.md).
-
-### 2. docker run
+Or drive it yourself:
 
 ```bash
 docker run -d --name matterbridge-elgato --network host --restart unless-stopped --stop-timeout 60 -e MDNS_INTERFACE=eth0 -e TZ=Europe/London -v "$PWD/data/.matterbridge:/root/.matterbridge" -v "$PWD/data/Matterbridge:/root/Matterbridge" -v "$PWD/data/.mattercert:/root/.mattercert" ghcr.io/passtas/matterbridge-elgato:latest
 ```
 
-Replace `eth0` with the interface that faces your LAN (`ip -br addr` lists them)
-and `Europe/London` with your timezone. The plugin is already installed in the
-image and registers itself on first start, so there is no second command to run.
+Swap `eth0` for the interface facing your LAN (`ip -br addr` lists them) and
+`Europe/London` for your timezone. The plugin registers itself on first start.
 Open `http://<host-ip>:8283` for the pairing code.
 
-### 3. Docker Compose
+The compose file, the full flag reference and notes for Synology, QNAP, Unraid
+and Raspberry Pi are in [docs/install.md](docs/install.md).
 
-This is exactly the file the setup command writes.
+**What the bundle needs:**
 
-```yaml
-# Written by `npx matterbridge-elgato setup`. Safe to edit and re-run.
-services:
-  matterbridge-elgato:
-    image: ghcr.io/passtas/matterbridge-elgato:latest
-    container_name: matterbridge-elgato
-    # Mandatory: Matter and mDNS both need the host network, and so does the
-    # plugin's own _elg._tcp discovery of the Elgato lights.
-    network_mode: host
-    restart: unless-stopped
-    stop_grace_period: 60s
-    environment:
-      # The LAN interface Matter advertises on. Docker hosts always have several
-      # interfaces; naming the right one is what makes the bridge discoverable.
-      MDNS_INTERFACE: eth0
-      FRONTEND_PORT: "8283"
-      TZ: Europe/London
-    volumes:
-      - ./data/.matterbridge:/root/.matterbridge
-      - ./data/Matterbridge:/root/Matterbridge
-      - ./data/.mattercert:/root/.mattercert
-```
+- An always-on Linux box with Docker on the same LAN as the lights. A home
+  server, a NAS, a Raspberry Pi. It only works while that box is on.
+- Host networking. Matter and mDNS run on multicast, which does not cross a
+  Docker bridge network.
+- Not Docker Desktop. On macOS and Windows its host network is a VM's, so
+  nothing is discovered and nothing pairs.
+  [Why](docs/install.md#docker-desktop-on-macos-and-windows-will-not-do).
+- IPv6 on the LAN. Matter speaks IPv6 locally. Your internet connection does not
+  need it, your router does.
 
-`docker compose up -d`, then open `http://<host-ip>:8283`. Back up
-`data/.matterbridge` before any factory reset: it holds the Matter commissioning
-data and the plugin config.
-
-## Install with your AI assistant
-
-If you use Claude Code, Codex, Cursor or a similar agent on the machine that will
-run the bridge, paste this:
-
-```text
-Install matterbridge-elgato on this machine so my Elgato lights show up in my
-smart home app. Read
-https://raw.githubusercontent.com/passtas/matterbridge-elgato/main/AGENTS.md
-first and follow the install procedure in it exactly, including the question it
-tells you to ask me before you run anything.
-```
-
-The procedure starts by asking whether this is an always-on machine, because
-installing on a laptop means installing Docker there and leaving the laptop
-running. Answer that, and the rest is the setup command plus the pairing steps.
+A Matter controller too, of course: a Nest hub or Nest Wifi point, a HomePod or
+Apple TV, an Echo of the 4th generation or newer.
 
 ## Pairing
 
-The pairing code shows up in three places, whichever suits you:
-
-- printed by `setup` when it finishes, and again by `status`,
-- in the Matterbridge frontend at `http://<host-ip>:8283`,
-- in the log, as `Manual pairing code` and `QR Code URL`
-  (`matterbridge-elgato logs`).
-
-Then:
+The code shows up in three places: printed by `setup` when it finishes and again
+by `status`, in the frontend at `http://<host-ip>:8283`, and in the log as
+`Manual pairing code` and `QR Code URL`.
 
 - **Google Home**: `+`, Set up device, Works with Google Home, Matter device,
-  scan the QR code or type the manual code.
+  then scan the QR code or type the manual code.
 - **Apple Home**: `+`, Add Accessory, More options or "My device is not shown",
   then enter the code.
 - **Alexa**: Devices, `+`, Add Device, Other, Matter, then enter the code.
 
-You can pair more than one. After the first controller has adopted the bridge,
-open the frontend's _Paired fabrics_ panel and turn pairing mode back on, then
-run the next controller's flow. Each one gets its own fabric and they do not
-interfere.
+Do it more than once. After the first controller has adopted the bridge, open the
+frontend's _Paired fabrics_ panel, turn pairing mode back on, and run the next
+one. Each controller gets its own fabric and they leave each other alone.
+
+## What you get
+
+- Say "Hey Google, office off" and the Key Light goes dark with the rest of the
+  room. Same for Siri and Alexa.
+- The lights join rooms, routines and schedules like any other bulb. A sunset
+  routine can warm the Key Light and turn the Strip amber with nothing in your
+  hand.
+- On, off, brightness and color temperature on the Key Lights. On, off,
+  brightness and color on the Light Strip. Move the slider and the real light
+  moves, not a cloud copy of it.
+- Nothing leaves the house. The lights speak HTTP on your LAN, the bridge speaks
+  Matter on your LAN, and there is no Elgato account anywhere in the path.
+- Google, Apple and Alexa at once, on the same bridge, because Matter allows
+  several admins. Your phone and somebody else's can be in different ecosystems
+  and still both work.
+
+New lights are found by themselves over mDNS, filed by serial number so a new
+DHCP address does not create a duplicate, and there is a manual address list for
+networks that filter multicast.
+[docs/how-it-works.md](docs/how-it-works.md) has the mechanics and the limits.
 
 ## Supported models
 
@@ -199,28 +147,45 @@ in the log once and never probes it again. The protocol notes and the design are
 in [#1](https://github.com/passtas/matterbridge-elgato/issues/1); somebody who
 owns one has to build it.
 
-## Configuration
+## Updating, and where your data lives
 
-Poll interval, color debounce, mDNS on or off, manual addresses, white and black
-lists, and how device names are pinned:
-[docs/configuration.md](docs/configuration.md). Edit it in the Matterbridge
-frontend, or by hand in `matterbridge-elgato.config.json` in the Matterbridge
-data directory.
+Bundle: `docker compose pull && docker compose up -d` in the directory `setup`
+created. Existing Matterbridge: install the plugin again from the frontend's
+Install plugins panel, then restart.
+
+Everything persistent sits in `data/` next to the compose file. `.matterbridge`
+is the one that matters: it holds the Matter commissioning data and the plugin
+config, so back it up before any factory reset. Lose it and every controller has
+to pair again. More in [docs/install.md](docs/install.md).
+
+## Install with your AI assistant
+
+Running Claude Code, Codex or Cursor on the machine that will host the bridge?
+Paste this and let it do the work.
+
+```text
+Install matterbridge-elgato on this machine so my Elgato lights show up in my
+smart home app. Read
+https://raw.githubusercontent.com/passtas/matterbridge-elgato/main/AGENTS.md
+first and follow the install procedure in it exactly, including the questions it
+tells you to ask me before you run anything.
+```
+
+It checks whether Matterbridge is already here before it reaches for the bundle,
+and it asks whether this machine stays on, because a bridge on a laptop is a
+bridge that stops working when the lid closes.
 
 ## Footprint
 
-Measured over 30 minutes on the machine below, with two lights connected:
-process CPU about 0.02 %, resident memory about 195 MB steady, heap about 70 MB
-and flat, no growth.
+Two lights connected, 30 minutes: process CPU about 0.02 %, resident memory about
+195 MB steady, heap about 70 MB and flat, no growth.
 
-That was on a Beelink EQR6 mini PC (Ryzen 7 6800H, 32 GB) running Ubuntu 24.04
+Measured on a Beelink EQR6 mini PC (Ryzen 7 6800H, 32 GB) running Ubuntu 24.04
 LTS on x86_64, Docker 29, alongside about twenty other containers, wired
 Ethernet, a Google Nest Wifi mesh with the lights on 2.4 GHz, and a Nest hub as
 the Matter controller. The lights were a Key Light Air on firmware 1.0.3 and a
 Light Strip on firmware 1.0.4. The arm64 image is built in CI and has never been
 run on hardware.
-
-### Confirmed setups
 
 | Piece      | What was tested                                                                          | Status                     |
 | ---------- | ---------------------------------------------------------------------------------------- | -------------------------- |
@@ -235,10 +200,16 @@ run on hardware.
 Add yours in [#4](https://github.com/passtas/matterbridge-elgato/issues/4) and it
 goes in this table.
 
-## Troubleshooting
+## Docs
 
-Nothing found, pairing that never completes, a light that shows as unreachable,
-and how to collect a log: [docs/troubleshooting.md](docs/troubleshooting.md).
+- [Install notes](docs/install.md): flags, compose file, Synology, QNAP, Unraid,
+  Raspberry Pi.
+- [Configuration](docs/configuration.md): poll interval, manual addresses, white
+  and black lists, how device names are pinned.
+- [How it works](docs/how-it-works.md): discovery, polling, clamping, scenes, and
+  what it cannot do.
+- [Troubleshooting](docs/troubleshooting.md): nothing found, pairing that never
+  completes, collecting a log.
 
 ## Contributing
 
