@@ -32,7 +32,7 @@ bridge you already paired, with no new pairing step. Right if this is all new.**
 **Ordinary lights in the home app that is already on your phone.**
 
 - **Voice.** "Hey Google, office off" and the Key Light goes dark with the rest
-  of the room. Same for Siri and Alexa.
+  of the room. Siri and Alexa should behave the same, since Matter treats all three alike, but nobody has confirmed those two yet.
 - **Routines and schedules.** The lights join rooms and automations like any
   other bulb. A sunset routine warms the Key Light and turns the Strip amber with
   nothing in your hand.
