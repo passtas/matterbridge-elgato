@@ -1,6 +1,6 @@
 {
   "name": "matterbridge-elgato",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Matterbridge plugin for Elgato lights: Key Light, Key Light Air and Light Strip over Matter",
   "keywords": [
     "alexa",

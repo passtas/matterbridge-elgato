@@ -15,7 +15,10 @@ against real hardware, so they outrank anything you remember. Never add
 
 ## Installing it for a user
 
-First, check whether Matterbridge is already on this machine. If it is, the
+Two questions decide everything else. Answer the first yourself, ask the user the
+second, and do not run anything until you have both.
+
+**1. Is Matterbridge already running here?** Check, do not guess. If it is, the
 install is one click and none of the Docker work below applies.
 
 ```sh
@@ -30,8 +33,9 @@ install it, restart Matterbridge. It needs Matterbridge 3.10.0 or newer. The
 lights appear under the bridge they already paired, so there is no new pairing
 step. Skip to the troubleshooting notes at the bottom.
 
-Otherwise you are installing the bundle, which is Matterbridge and this plugin in
-one container. Ask this before running anything, and wait for the answer:
+**2. Is this an always-on Linux machine with Docker?** Otherwise you are
+installing the bundle, which is Matterbridge and this plugin in one container.
+Put this to the user in your own words and wait for the answer:
 
 > This runs best on an always-on Linux box with Docker: a home server, NAS, or
 > Raspberry Pi. If you're installing on your laptop or desktop, I'd need to
@@ -53,6 +57,11 @@ Then:
 2. If Docker is missing, point the user at
    https://docs.docker.com/engine/install/ for their distribution. Do not pipe an
    install script into a shell.
+
+   Host networking means the container binds TCP 8283, UDP 5540 and UDP 5353 on
+   the host. `ss -lnup | grep -E ':5540|:5353'` and `ss -lntp | grep :8283`
+   show whether something already holds them; if so, go back to question 1.
+
 3. Pair the bridge with the printed code:
    - Google Home: +, Set up device, Works with Google Home, Matter device,
      then scan or type the code.

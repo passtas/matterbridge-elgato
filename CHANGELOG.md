@@ -4,6 +4,44 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-09-05
+
+Documentation only. No code changes, so an existing install has nothing to gain
+from updating; npm shows the README of the published version, which is why this
+release exists.
+
+### Changed
+
+- README rewritten around the two install paths, with a side-by-side quick start
+  for an existing Matterbridge and for the container bundle, and one line saying
+  which is for whom.
+- Pairing a second controller now describes the frontend control that exists:
+  the advertise button in the _Paired fabrics_ panel, tooltip "Send again the
+  mDNS advertisement".
+- "Install with your AI assistant" gained prefilled-chat links for Claude,
+  ChatGPT and Copilot, and terminal one-liners for Claude Code and Codex that
+  run the install rather than talk about it.
+
+### Added
+
+- README section "What this puts on your LAN": the unauthenticated frontend on
+  8283, the UDP 5540 and 5353 binds that collide with another Matter server on
+  the same host, the container running as root, the lights' own open HTTP API on
+  9123, the two outbound connections, the missing `Origin` header
+  (CVE-2025-7202), and the commitment never to bundle Elgato's private keys.
+- Port collision documented in `docs/install.md` requirements and in
+  `docs/troubleshooting.md`, with the `ss` commands to check.
+- `docs/install.md` now carries the `docker run` one-liner that used to be in
+  the README.
+
+### Fixed
+
+- Adversarial review findings that landed after the 0.1.0 publish and so never
+  reached npm: the local-only claim is scoped to the light path, the MK.2 retry
+  wording matches the code, the image tags and architectures are listed, the
+  Windows and macOS answer is spelled out, and the pairing steps now agree
+  across the README, `AGENTS.md` and the CLI.
+
 ## [0.1.0] - 2026-09-05
 
 ### Added

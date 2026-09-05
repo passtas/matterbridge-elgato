@@ -1,8 +1,8 @@
 # Install notes
 
 The two install paths are in the
-[README](../README.md#two-ways-to-install). This page has the details that would
-make it twice as long: the full requirements, the Docker Desktop caveat, the
+[README](../README.md#sixty-seconds-to-first-light). This page has the details
+that would make it twice as long: the full requirements, the Docker Desktop caveat, the
 compose file, the flag reference for the setup command, per-NAS notes, and how to
 update.
 
@@ -14,6 +14,13 @@ update.
 - **Host networking for the container.** Matter and mDNS both work over
   multicast, which does not cross a Docker bridge network, so the container has
   to share the host's network stack.
+- **Ports 8283, 5540 and 5353 free on the host.** Host networking means the
+  container binds the Matterbridge frontend on TCP 8283, Matter on UDP 5540 and
+  mDNS on UDP 5353. Another Matterbridge, or Home Assistant's Matter server, on
+  the same host already holds them and the two will collide. Check before you
+  start: `ss -lnup | grep -E ':5540|:5353'` and `ss -lntp | grep :8283`. If
+  something answers, put this bridge on a different host, or install the plugin
+  into the Matterbridge that is already there.
 - **IPv6 enabled on the LAN.** Matter talks IPv6 locally. Your internet
   connection does not need it, your router's LAN does.
 - **A Matter controller**: a Nest hub or Nest Wifi point for Google Home, a
@@ -140,6 +147,20 @@ services:
 
 `docker compose up -d`, then open `http://<host-ip>:8283`.
 
+Without a compose file at all, the same stack as one command:
+
+```bash
+docker run -d --name matterbridge-elgato --network host --restart unless-stopped \
+  --stop-timeout 60 -e MDNS_INTERFACE=eth0 -e TZ=Europe/London \
+  -v "$PWD/data/.matterbridge:/root/.matterbridge" \
+  -v "$PWD/data/Matterbridge:/root/Matterbridge" \
+  -v "$PWD/data/.mattercert:/root/.mattercert" \
+  ghcr.io/passtas/matterbridge-elgato:latest
+```
+
+Swap `eth0` for the interface facing your LAN (`ip -br addr` lists them) and
+`Europe/London` for your timezone. The plugin registers itself on first start.
+
 ## Updating, and what to back up
 
 In the directory the setup command created:
@@ -149,7 +170,7 @@ docker compose pull && docker compose up -d
 ```
 
 The image is published for `linux/amd64` and `linux/arm64`, tagged `latest`,
-`0.1` and `0.1.0`. Pin `ghcr.io/passtas/matterbridge-elgato:0.1` in the
+`0.1` and the exact version. Pin `ghcr.io/passtas/matterbridge-elgato:0.1` in the
 compose file if you would rather move minor version by minor version than
 follow `latest`.
 
