@@ -3,15 +3,13 @@ name: Publish to npm
 # Publishing to npm is what gets the plugin listed in Matterbridge's frontend:
 # its "Search plugins" dialog scrapes the npm registry for `matterbridge-*`.
 #
-# Authentication, in order of preference:
-#   1. Trusted publishing (OIDC). Configure this package's trusted publisher on
-#      npmjs.com (Settings → Trusted publishers → GitHub Actions, repository
-#      passtas/matterbridge-elgato, workflow publish-npm.yml). npm then needs no
-#      token at all and attaches provenance automatically. npm requires the
-#      package to exist first, so the *first* 0.1.0 publish uses the token path.
-#   2. NPM_TOKEN repository secret – a granular automation token with
-#      "Read and write" access to the package.
-# `id-token: write` is required either way for provenance attestation.
+# Authentication is npm trusted publishing (OIDC): the package's trusted
+# publisher on npmjs.com is this repository and this workflow file, so no
+# token or secret is involved and npm attaches provenance automatically.
+# `id-token: write` is what makes that possible.
+#
+# The very first version was published by hand, because npm only lets you
+# configure a trusted publisher on a package that already exists.
 
 on:
   push:
@@ -61,5 +59,3 @@ jobs:
 
       - name: Publish
         run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
