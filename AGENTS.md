@@ -54,8 +54,10 @@ Then:
    https://docs.docker.com/engine/install/ for their distribution. Do not pipe an
    install script into a shell.
 3. Pair the bridge with the printed code:
-   - Google Home: Devices, +, Matter device, then scan or type the code.
-   - Apple Home: +, Add Accessory, More options, then scan or type the code.
+   - Google Home: +, Set up device, Works with Google Home, Matter device,
+     then scan or type the code.
+   - Apple Home: +, Add Accessory, More options (or "My device is not
+     shown"), then scan or type the code.
    - Alexa: Devices, +, Add Device, Other, Matter, then scan or type the code.
 
    All three can be added at once, because Matter allows several admins.

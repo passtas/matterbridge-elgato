@@ -21,6 +21,10 @@ the pairing code and the plugin config live.
 
 ## Two ways to install
 
+The bridge runs inside [Matterbridge](https://github.com/Luligu/matterbridge),
+an open source Matter bridge. If you already run it, this is a plugin. If you
+have never heard of it, take the bundle: one container with both inside.
+
 ### Already running Matterbridge
 
 Open your frontend, go to Install plugins, type `matterbridge-elgato`, click
@@ -97,8 +101,10 @@ one. Each controller gets its own fabric and they leave each other alone.
 - On, off, brightness and color temperature on the Key Lights. On, off,
   brightness and color on the Light Strip. Move the slider and the real light
   moves, not a cloud copy of it.
-- Nothing leaves the house. The lights speak HTTP on your LAN, the bridge speaks
-  Matter on your LAN, and there is no Elgato account anywhere in the path.
+- No cloud in the light path. The lights speak HTTP on your LAN, the bridge
+  speaks Matter on your LAN, and there is no Elgato account anywhere. The
+  bridge reaches the internet for two things only: Docker pulls the image, and
+  Matterbridge checks npm for plugin updates.
 - Google, Apple and Alexa at once, on the same bridge, because Matter allows
   several admins. Your phone and somebody else's can be in different ecosystems
   and still both work.
@@ -143,7 +149,7 @@ template and a checklist in
 
 A Key Light Air MK.2 is found and then left alone on purpose: that generation
 speaks mutual TLS on port 9123 instead of the plain HTTP API. The plugin names it
-in the log once and never probes it again. The protocol notes and the design are
+in the log once and then leaves it alone. The protocol notes and the design are
 in [#1](https://github.com/passtas/matterbridge-elgato/issues/1); somebody who
 owns one has to build it.
 
@@ -177,8 +183,10 @@ bridge that stops working when the lid closes.
 
 ## Footprint
 
-Two lights connected, 30 minutes: process CPU about 0.02 %, resident memory about
-195 MB steady, heap about 70 MB and flat, no growth.
+Two lights connected, 30 minutes, read from the Matterbridge frontend's own CPU
+and memory history. The numbers are the whole bridge process, Matterbridge
+included, not the plugin alone: CPU about 0.02 %, resident memory about 195 MB
+steady, heap about 70 MB and flat, no growth.
 
 Measured on a Beelink EQR6 mini PC (Ryzen 7 6800H, 32 GB) running Ubuntu 24.04
 LTS on x86_64, Docker 29, alongside about twenty other containers, wired

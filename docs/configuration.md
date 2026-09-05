@@ -53,6 +53,8 @@ name shows up in Google Home and Apple Home on the next pass.
 
 To choose the name yourself, add the light to `devices` with an explicit `name`.
 That always wins, and it is what gets pinned, so removing it later keeps the
-pinned name rather than reverting to the Elgato one. To start over for one light,
-delete it from the plugin's storage directory and restart Matterbridge, and
-expect the controllers to treat it as a new device.
+pinned name rather than reverting to the Elgato one. To start over, delete the
+plugin's storage directory inside the Matterbridge storage directory
+(`.matterbridge`) and restart Matterbridge. It is one record for every light, so
+this also drops the remembered Light Strip scene, and the controllers treat the
+lights as new devices.

@@ -33,6 +33,12 @@ your LAN, so discovery and pairing cannot work. Run this on a Linux host. The
 setup command refuses to run there unless you pass `--yes`, and even then it
 only writes the files, it never starts the stack.
 
+WSL2 in its default NAT mode has the same problem. If a Windows PC or a Mac is
+all you have, the bridge needs somewhere else to live: a Raspberry Pi, a NAS
+that runs Docker, or any old machine with Linux on it. It has to stay on, so a
+low-power box beats a desktop. The other way in is a Matterbridge you already
+run somewhere, which is a plugin install and none of this.
+
 ## The setup command in full
 
 ```bash
@@ -141,6 +147,11 @@ In the directory the setup command created:
 ```bash
 docker compose pull && docker compose up -d
 ```
+
+The image is published for `linux/amd64` and `linux/arm64`, tagged `latest`,
+`0.1` and `0.1.0`. Pin `ghcr.io/passtas/matterbridge-elgato:0.1` in the
+compose file if you would rather move minor version by minor version than
+follow `latest`.
 
 Re-running `setup` in the same directory is safe, but it does not pull a newer
 image on its own, so use the two commands above to update. A plugin installed

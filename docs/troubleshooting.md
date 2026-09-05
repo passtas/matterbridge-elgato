@@ -3,10 +3,11 @@
 **No lights found.** The host and the lights have to be on the same LAN with
 multicast allowed between them, which rules out a separate IoT VLAN unless the
 router reflects mDNS. On a host with several interfaces, the wrong one is the
-usual cause: check `MDNS_INTERFACE` against `ip -br addr`, and use
-`matterbridge --loginterfaces` for the names Matterbridge itself sees. If
-multicast is filtered on your network, skip discovery and list the addresses
-directly under `devices` in the config.
+usual cause: check `MDNS_INTERFACE` against `ip -br addr`, and run
+`docker exec matterbridge-elgato matterbridge --loginterfaces` (or plain
+`matterbridge --loginterfaces` on a bare install) for the names Matterbridge
+itself sees. If multicast is filtered on your network, skip discovery and list
+the addresses directly under `devices` in the config.
 
 **Pairing fails or the controller never finds the bridge.** IPv6 has to be
 enabled on the LAN, the container has to be on the host network, and the
