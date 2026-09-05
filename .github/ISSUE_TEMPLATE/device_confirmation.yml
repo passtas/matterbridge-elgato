@@ -1,0 +1,118 @@
+name: Device confirmation
+description: Report that a light, a controller or a platform works, or does not
+labels: ["confirmation", "documentation"]
+title: "Confirmation: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is how the README's model and setup tables get filled in, and it
+        costs about five minutes. No code required. Anything you cannot answer,
+        leave blank. A report that something does **not** work is just as
+        valuable as one that says it does.
+
+        Before pasting: `accessory-info` includes your serial number, MAC
+        address and Wi-Fi SSID. Redact what you are not comfortable publishing.
+        Never post anything from an Elgato Control Center `pki_*` folder.
+
+  - type: input
+    id: model
+    attributes:
+      label: Light model
+      placeholder: Elgato Key Light Mini
+    validations:
+      required: false
+
+  - type: textarea
+    id: mdns
+    attributes:
+      label: mDNS record
+      description: >
+        The line from `avahi-browse -rtp _elg._tcp`, or `dns-sd -B _elg._tcp` on
+        macOS. It carries `md=`, `dt=`, `id=`, `pv=` and sometimes `tls=`. Paste
+        it even if it is empty, because an empty result is a finding.
+      render: shell
+    validations:
+      required: false
+
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware
+      description: >
+        From `curl http://<light-ip>:9123/elgato/accessory-info`:
+        `firmwareVersion` and `firmwareBuildNumber`.
+    validations:
+      required: false
+
+  - type: input
+    id: controller
+    attributes:
+      label: Controller and ecosystem
+      placeholder: Apple Home, iOS 26, HomePod mini as the hub
+    validations:
+      required: false
+
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      description: OS, CPU architecture, Docker version, NAS model.
+      placeholder: Synology DS923+, DSM 7.2, Container Manager, x86_64
+    validations:
+      required: false
+
+  - type: input
+    id: network
+    attributes:
+      label: Network
+      description: >
+        Router or mesh, whether the light is on 2.4 or 5 GHz, same VLAN as the
+        host, host wired or wireless.
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+      placeholder: 0.1.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: worked
+    attributes:
+      label: What worked
+      description: >
+        Discovery, pairing, on and off, brightness, color temperature, color,
+        scene behavior, state updates when the light is changed from the Elgato
+        app.
+    validations:
+      required: false
+
+  - type: textarea
+    id: did-not
+    attributes:
+      label: What did not work
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: Run with debug enabled. Redact SSIDs, serials and MAC addresses.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot
+      description: >
+        The device tile in your controller app. Optional, and the most
+        convincing evidence there is.
+    validations:
+      required: false

@@ -1,0 +1,41 @@
+{
+  "_comment": "Captured 2026-09-04 from real devices with `avahi-browse -rtp _elg._tcp` (avahi-daemon, wired iface eth0); addresses resolved with `avahi-resolve -n` / `avahi-resolve -6 -n`. Structure and record shape are verbatim; serials, MACs, names, hostnames and addresses are synthetic. Service type is _elg._tcp.local.",
+  "serviceType": "_elg._tcp.local",
+  "capturedAt": "2026-09-04",
+  "services": [
+    {
+      "instanceName": "Elgato Key Light Air 1A2B",
+      "hostname": "elgato-key-light-air-1a2b.local",
+      "port": 9123,
+      "addresses": {
+        "ipv4": ["192.168.1.50"],
+        "ipv6": ["fe80::3e6a:9dff:fe00:1"]
+      },
+      "txt": {
+        "pv": "1.0",
+        "md": "Elgato Key Light Air 20LAB9901",
+        "id": "3C:6A:9D:00:00:01",
+        "dt": "200",
+        "mf": "Elgato"
+      },
+      "notes": "txt.id equals accessory-info.macAddress on this device."
+    },
+    {
+      "instanceName": "Elgato Light Strip 3C4D",
+      "hostname": "elgato-light-strip-3c4d.local",
+      "port": 9123,
+      "addresses": {
+        "ipv4": ["192.168.1.51"],
+        "ipv6": ["fe80::3e6a:9dff:fe00:2"]
+      },
+      "txt": {
+        "pv": "1.0",
+        "md": "Elgato Light Strip 20LAA9901",
+        "id": "01:C4:63:00:00:02",
+        "dt": "70",
+        "mf": "Elgato"
+      },
+      "notes": "txt.id (01:C4:63:00:00:02) does NOT equal accessory-info.macAddress (3C:6A:9D:00:00:02). Do not treat txt.id as a MAC or as a stable device key; use accessory-info.serialNumber instead."
+    }
+  ]
+}

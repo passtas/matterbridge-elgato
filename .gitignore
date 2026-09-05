@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.cache/
+*.tgz
+.env*
+.claude/settings.local.json
+deploy/data/
+deploy/docker-compose.override.yml
+.private/
+
+# Internal working documents (kept locally, not published)
+PROJECT.md
+docs/matterbridge-plugin-notes.md

@@ -1,0 +1,93 @@
+name: Bug report
+description: Something does not work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you paste anything: the log and `accessory-info` contain serial
+        numbers, MAC addresses and your Wi-Fi SSID. Redact whatever you would
+        rather not publish. A redacted report is still useful.
+
+  - type: input
+    id: model
+    attributes:
+      label: Light model
+      description: For example Elgato Key Light Air, or Elgato Light Strip.
+      placeholder: Elgato Key Light Air
+    validations:
+      required: true
+
+  - type: input
+    id: model-number
+    attributes:
+      label: Model number and type code
+      description: >
+        Both appear in the plugin log, and in `avahi-browse -rtp _elg._tcp` as
+        `md=` and `dt=`.
+      placeholder: md=Elgato Key Light Air 20LAB9901, dt=200
+    validations:
+      required: false
+
+  - type: input
+    id: firmware
+    attributes:
+      label: Light firmware
+      description: >
+        `curl http://<light-ip>:9123/elgato/accessory-info` returns
+        `firmwareVersion` and `firmwareBuildNumber`.
+      placeholder: 1.0.3 build 195
+    validations:
+      required: false
+
+  - type: input
+    id: controller
+    attributes:
+      label: Matter controller
+      description: Which app and which hub.
+      placeholder: Google Home, Nest Hub 2nd gen
+    validations:
+      required: true
+
+  - type: textarea
+    id: host
+    attributes:
+      label: Docker host, and how you installed
+      description: >
+        OS, CPU architecture, Docker version, NAS model if it is a NAS. Then
+        whether you used `npx matterbridge-elgato setup`, `docker run`, a compose
+        file of your own, or a build from source.
+      placeholder: |
+        Raspberry Pi 5, Raspberry Pi OS 64-bit, Docker 29, arm64
+        Installed with npx matterbridge-elgato@latest setup
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+      placeholder: 0.1.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what you got instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: >
+        `npx matterbridge-elgato@latest logs`, or `docker logs
+        matterbridge-elgato`. Turn on `debug` in the plugin config first if the
+        plain log shows nothing useful. Pasted text is formatted as a log block,
+        no backticks needed.
+      render: shell
+    validations:
+      required: false

@@ -1,0 +1,80 @@
+{
+  "title": "Matterbridge Elgato plugin",
+  "description": "matterbridge-elgato v. 0.1.0 by https://github.com/passtas",
+  "type": "object",
+  "properties": {
+    "name": {
+      "description": "Plugin name",
+      "type": "string",
+      "readOnly": true,
+      "ui:widget": "hidden"
+    },
+    "type": {
+      "description": "Plugin type",
+      "type": "string",
+      "readOnly": true,
+      "ui:widget": "hidden"
+    },
+    "pollInterval": {
+      "title": "Poll interval (ms)",
+      "description": "How often each light is polled for state. The Elgato firmware has no push API. Minimum 1000 ms.",
+      "type": "number",
+      "default": 3000,
+      "minimum": 1000
+    },
+    "colorDebounce": {
+      "title": "Color debounce (ms)",
+      "description": "Controllers send hue and saturation as two separate commands; they are coalesced into one write after this delay.",
+      "type": "number",
+      "default": 400,
+      "minimum": 0
+    },
+    "enableMdns": {
+      "title": "Enable mDNS discovery",
+      "description": "Browse _elg._tcp for Elgato lights. Turn off to use only the manual device list.",
+      "type": "boolean",
+      "default": true
+    },
+    "devices": {
+      "title": "Manual devices",
+      "description": "Lights to add by address, for networks where mDNS does not work. Host may include a port. Name is optional and overrides the name set in the Elgato app.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "host": { "title": "Host or IP address", "type": "string" },
+          "name": { "title": "Name (optional)", "type": "string" }
+        },
+        "required": ["host"]
+      }
+    },
+    "whiteList": {
+      "title": "White list",
+      "description": "Only the devices in the list will be exposed. If the list is empty, all the devices will be exposed.",
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "selectFrom": "serial"
+    },
+    "blackList": {
+      "title": "Black list",
+      "description": "The devices in the list will not be exposed. If the list is empty, all the devices will be exposed.",
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true,
+      "selectFrom": "serial"
+    },
+    "debug": {
+      "title": "Enable debug",
+      "description": "Enable the debug logging for this plugin.",
+      "type": "boolean",
+      "default": false
+    },
+    "unregisterOnShutdown": {
+      "title": "Unregister on shutdown",
+      "description": "Unregister all devices on shutdown. Use only for testing.",
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

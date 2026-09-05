@@ -1,0 +1,10 @@
+{
+  "ignorePatterns": [
+    "test/fixtures/**",
+    "coverage/**",
+    "dist/**",
+    ".cache/**",
+    "docs/**",
+    "PROJECT.md"
+  ]
+}

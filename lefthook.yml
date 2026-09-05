@@ -1,0 +1,21 @@
+pre-commit:
+  parallel: true
+  commands:
+    typecheck:
+      run: npm run typecheck
+    oxlint:
+      glob: "*.{js,mjs,ts}"
+      run: npx oxlint --fix --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    oxfmt:
+      glob: "*.{js,mjs,ts,json,md,yml,yaml}"
+      exclude:
+        - package-lock.json
+        - lefthook.yml
+      run: npx oxfmt --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+
+commit-msg:
+  commands:
+    commitlint:
+      run: npx commitlint --edit {1}

@@ -1,0 +1,8 @@
+# Copy to docker-compose.override.yml (gitignored; both `docker compose` and the
+# standalone `docker-compose` binary load it automatically) if you need to
+# replace the command the entrypoint builds for you. Setting MDNS_INTERFACE,
+# FRONTEND_PORT and TZ in the environment is enough for everything else, so most
+# people never need this file.
+services:
+  matterbridge:
+    command: ["matterbridge", "--docker", "--mdnsinterface", "eth0", "--logger", "debug"]

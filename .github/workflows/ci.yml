@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --no-fund --no-audit
+
+      # A plugin must never depend on matterbridge; it is linked from the global
+      # install instead. See docs/matterbridge-api-cheatsheet.md §1.
+      - name: Link matterbridge
+        run: |
+          npm i -g matterbridge --no-fund --no-audit
+          npm link matterbridge --no-fund --no-audit
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run build
+
+      - name: Check the published file list
+        run: npm pack --dry-run

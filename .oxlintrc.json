@@ -1,0 +1,20 @@
+{
+  "plugins": ["typescript", "import", "unicorn"],
+  "rules": {
+    "no-console": "error",
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "import/no-cycle": "error",
+    "import/no-self-import": "error",
+    "import/no-duplicates": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/no-array-for-each": "warn",
+    "typescript/no-explicit-any": "error"
+  },
+  "overrides": [
+    {
+      "files": ["test/**/*.ts", "scripts/**/*.ts"],
+      "rules": { "no-console": "off" }
+    }
+  ],
+  "ignorePatterns": ["node_modules", "dist", "coverage", ".cache", "deploy/data"]
+}

@@ -1,0 +1,65 @@
+name: Publish to npm
+
+# Publishing to npm is what gets the plugin listed in Matterbridge's frontend:
+# its "Search plugins" dialog scrapes the npm registry for `matterbridge-*`.
+#
+# Authentication, in order of preference:
+#   1. Trusted publishing (OIDC). Configure this package's trusted publisher on
+#      npmjs.com (Settings → Trusted publishers → GitHub Actions, repository
+#      passtas/matterbridge-elgato, workflow publish-npm.yml). npm then needs no
+#      token at all and attaches provenance automatically. npm requires the
+#      package to exist first, so the *first* 0.1.0 publish uses the token path.
+#   2. NPM_TOKEN repository secret – a granular automation token with
+#      "Read and write" access to the package.
+# `id-token: write` is required either way for provenance attestation.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: npm publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci --no-fund --no-audit
+
+      # A plugin must never depend on matterbridge; it is linked from the global
+      # install instead. See docs/matterbridge-api-cheatsheet.md §1.
+      - name: Link matterbridge
+        run: |
+          npm i -g matterbridge --no-fund --no-audit
+          npm link matterbridge --no-fund --no-audit
+
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm test
+      - run: npm run build
+
+      - name: Check the tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg="$(node -p "require('./package.json').version")"
+          if [ "$tag" != "$pkg" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match package.json version $pkg"
+            exit 1
+          fi
+
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

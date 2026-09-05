@@ -1,0 +1,12 @@
+{
+  "name": "matterbridge-elgato",
+  "type": "DynamicPlatform",
+  "pollInterval": 3000,
+  "colorDebounce": 400,
+  "enableMdns": true,
+  "devices": [],
+  "whiteList": [],
+  "blackList": [],
+  "debug": false,
+  "unregisterOnShutdown": false
+}

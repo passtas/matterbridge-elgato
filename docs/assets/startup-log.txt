@@ -1,0 +1,26 @@
+[10:53:46.983] [PluginManager] Loading plugin matterbridge-elgato type AnyPlatform
+[10:53:47.045] [Matterbridge plugin for Elgato lights: Key Light, Key Light Air and Light Strip over Matter] Initializing the Elgato platform
+[10:53:47.046] [PluginManager] Loaded plugin matterbridge-elgato type DynamicPlatform (entrypoint /usr/local/lib/node_modules/matterbridge-elgato/dist/index.js)
+[10:53:47.046] [PluginManager] Starting plugin matterbridge-elgato type DynamicPlatform
+[10:53:47.046] [Matterbridge plugin for Elgato lights: Key Light, Key Light Air and Light Strip over Matter] onStart called with reason: Matterbridge is starting
+[10:53:47.115] [Elgato Key Light Air 1A2B] MatterbridgePowerSourceServer: initializing (endpoint CW33J1A00001.4)
+[10:53:47.120] [Endpoint] Matterbridge.Matterbridge.CW33J1A00001 ready endpoint#: 4 type: ColorTemperatureLight (0x010c, rev 4) behaviors: ✓descriptor ✓matterbridge ✓identify ✓bridgedDeviceBasicInformation ✓onOff ✓levelControl ✓colorControl ✓powerSource ✓groups ✓scenesManagement
+[10:53:47.121] [Matterbridge] Subscribing attributes for endpoint Elgato Key Light Air 1A2B (CW33J1A00001) plugin matterbridge-elgato
+[10:53:47.122] [Matterbridge] Added and registered bridged endpoint (1) Elgato Key Light Air 1A2B (CW33J1A00001) for plugin matterbridge-elgato
+[10:53:47.123] [Matterbridge plugin for Elgato lights: Key Light, Key Light Air and Light Strip over Matter] Registered Elgato Key Light Air "Elgato Key Light Air 1A2B" (CW33J1A00001) at 172.31.250.1:9123 as colorTemperatureLight
+[10:53:47.173] [Elgato Light Strip 3C4D] MatterbridgePowerSourceServer: initializing (endpoint EW52J1A00002.5)
+[10:53:47.178] [Endpoint] Matterbridge.Matterbridge.EW52J1A00002 ready endpoint#: 5 type: ExtendedColorLight (0x010d, rev 4) behaviors: ✓descriptor ✓matterbridge ✓identify ✓bridgedDeviceBasicInformation ✓onOff ✓levelControl ✓colorControl ✓powerSource ✓groups ✓scenesManagement
+[10:53:47.178] [Matterbridge] Subscribing attributes for endpoint Elgato Light Strip 3C4D (EW52J1A00002) plugin matterbridge-elgato
+[10:53:47.179] [Matterbridge] Added and registered bridged endpoint (2) Elgato Light Strip 3C4D (EW52J1A00002) for plugin matterbridge-elgato
+[10:53:47.180] [Matterbridge plugin for Elgato lights: Key Light, Key Light Air and Light Strip over Matter] Registered Elgato Light Strip "Elgato Light Strip 3C4D" (EW52J1A00002) at 172.31.250.1:9124 as extendedColorLight
+[10:53:47.180] [Matterbridge plugin for Elgato lights: Key Light, Key Light Air and Light Strip over Matter] Discovered 2 Elgato device(s)
+[10:53:47.180] [PluginManager] Started plugin matterbridge-elgato type DynamicPlatform
+[10:53:47.984] [Matterbridge] Starting Matterbridge server node
+[10:53:47.984] [Matterbridge] Matterbridge bridge started successfully
+[10:53:47.985] [Node] Matterbridge going online
+[10:53:47.992] [Node] Matterbridge is online
+[10:53:48.001] [Commissioning] Matterbridge is uncommissioned passcode: 98196118 discriminator: 3985 manual pairing code: 35595859937
+[10:53:48.001] [Matterbridge] Server node for Matterbridge is online
+[10:53:48.001] [Matterbridge] Server node for Matterbridge is not commissioned. Pair to commission.
+[10:53:48.002] [Matterbridge] QR Code URL: https://project-chip.github.io/connectedhomeip/qrcode.html?data=MT:Y.K90IRV01WVEQ5W220
+[10:53:48.002] [Matterbridge] Manual pairing code 35595859937 discriminator 3985 short discriminator 15 passcode 98196118

@@ -1,0 +1,24 @@
+# Build-from-source stack, for working on the plugin. To just run it, use the
+# published image instead: see the README's Install section.
+services:
+  matterbridge:
+    container_name: matterbridge
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Mandatory: Matter and mDNS both need the host network, and so does the
+    # plugin's own _elg._tcp discovery.
+    network_mode: host
+    restart: unless-stopped
+    stop_grace_period: 60s
+    environment:
+      # The LAN interface Matter advertises on. Set it in your shell or in a
+      # .env file next to this one; leaving it empty only works on a host with a
+      # single network interface. `matterbridge --loginterfaces` lists them.
+      MDNS_INTERFACE: ${MDNS_INTERFACE:-}
+      FRONTEND_PORT: ${FRONTEND_PORT:-8283}
+      TZ: ${TZ:-Etc/UTC}
+    volumes:
+      - ./data/Matterbridge:/root/Matterbridge
+      - ./data/.matterbridge:/root/.matterbridge
+      - ./data/.mattercert:/root/.mattercert
