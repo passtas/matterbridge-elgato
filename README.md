@@ -124,15 +124,15 @@ plain HTTP API. If you own an unconfirmed model, a report fills in a row
 heap about 70 MB and flat, no growth.** Read from the Matterbridge frontend's own
 history, for the whole bridge process rather than the plugin alone.
 
-| Piece      | What was tested                                                                          | Status                     |
-| ---------- | ---------------------------------------------------------------------------------------- | -------------------------- |
-| Host       | Beelink EQR6 (Ryzen 7 6800H, 32 GB), Ubuntu 24.04 LTS, x86_64, Docker 29, wired Ethernet | Confirmed 2026-09-05       |
-| Network    | Google Nest Wifi mesh, lights on 2.4 GHz, host wired on the same LAN                     | Confirmed 2026-09-05       |
-| Controller | Google Home, Nest hub as the Matter controller                                           | Confirmed 2026-09-05       |
-| Lights     | Key Light Air fw 1.0.3, Light Strip fw 1.0.4                                             | Confirmed 2026-09-05       |
-| Apple Home | HomePod or Apple TV as the Matter controller                                             | Expected, nobody has tried |
-| Alexa      | Echo 4th generation or newer                                                             | Expected, nobody has tried |
-| arm64      | Raspberry Pi or an ARM NAS                                                               | Image builds in CI, unrun  |
+| Piece      | What was tested                                                                           | Status                                                                                                              |
+| ---------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Host       | Beelink EQR6 (Ryzen 7 6800H, 32 GB), Ubuntu 24.04 LTS, x86_64, Docker 29, wired Ethernet  | Confirmed 2026-09-05                                                                                                |
+| Network    | Google Nest Wifi mesh, lights on 2.4 GHz, host wired on the same LAN                      | Confirmed 2026-09-05                                                                                                |
+| Controller | Google Home, Nest hub as the Matter controller                                            | Confirmed 2026-09-05                                                                                                |
+| Lights     | Key Light Air fw 1.0.3, Light Strip fw 1.0.4                                              | Confirmed 2026-09-05                                                                                                |
+| Apple Home | HomePod, HomePod mini and Apple TV 4K as hubs, iOS 27, two Key Light Airs, Debian 12 host | Confirmed 2026-09-25 by [@iSchack](https://github.com/passtas/matterbridge-elgato/issues/4#issuecomment-5839396738) |
+| Alexa      | Echo 4th generation or newer                                                              | Expected, nobody has tried                                                                                          |
+| arm64      | Raspberry Pi or an ARM NAS                                                                | Image builds in CI, unrun                                                                                           |
 
 Add yours in [#4](https://github.com/passtas/matterbridge-elgato/issues/4).
 
