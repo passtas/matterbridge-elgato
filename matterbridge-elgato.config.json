@@ -4,6 +4,7 @@
   "pollInterval": 3000,
   "colorDebounce": 400,
   "enableMdns": true,
+  "preserveSceneOnOff": false,
   "devices": [],
   "whiteList": [],
   "blackList": [],

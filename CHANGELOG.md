@@ -4,6 +4,40 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `preserveSceneOnOff` config flag, off by default (#3). With it on, switching off
+  a Light Strip that is playing a scene sends the cached scene back with `on: 0` in
+  the same body, so the strip parks off with the scene still stored instead of
+  reverting to its previous color. The next on replays the scene as before, since
+  a bare `{on: 1}` does not resume a parked one, and with the flag on an On also
+  resumes a strip that is off inside a scene for any other reason (another app, a
+  bridge restart).
+  - If the strip refuses the scene body (an HTTP error, or an error reply), one
+    bare `{on: 0}` follows and the refusal is logged at debug, so an off is not
+    lost because the light refused the scene. If the strip does not answer at
+    all, or answers with a reply that does not parse, nothing more is sent and
+    the next poll reconciles, as for any failed write.
+  - The park is only tried from a settled state. With a write still queued or a
+    color change waiting in the debounce, the plain off goes out instead.
+  - Key Lights are untouched. With the flag unset, the bytes on the wire are the
+    same as in 0.1.1 for any on/off sequence whose commands do not overlap; the
+    one change for overlapping commands is under Fixed. It stays opt-in until a
+    release of field reports, because it changes what is stored on the light.
+
+### Changed
+
+- The Light Strip's remembered scene is written to storage only when the scene
+  changes, instead of on every poll that sees one playing. A strip left in a scene
+  no longer costs a disk write every poll interval.
+
+### Fixed
+
+- An off that arrives while the Light Strip's scene is being put back no longer
+  makes the next on forget to put it back again.
+
 ## [0.1.1] - 2026-09-05
 
 Documentation only. No code changes, so an existing install has nothing to gain
@@ -83,10 +117,3 @@ release exists.
 - Mock device server (`npm run mock`) emulating both models, including the mDNS
   advertisement, for development without real lights. `--mk2` adds a mock of the
   unsupported generation.
-
-## Planned
-
-- `preserveSceneOnOff` flag (v0.2): re-PUT the cached scene with `on: 0` so the Light
-  Strip parks itself off with the scene intact, falling back to a bare `{on: 0}` if the
-  firmware rejects the body. Not in v0.1: a bare `{on: 1}` does not resume a scene
-  anyway, and putting a large body on the critical `off` path risks a generic 400.
