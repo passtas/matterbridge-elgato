@@ -6,7 +6,12 @@
  * The state machine follows the PUT semantics verified live in
  * docs/elgato-protocol.md: partial bodies, full-state responses, unknown fields
  * dropped in silence, the Key Light Air's "ignore out-of-range brightness, store any
- * temperature" behavior, the Light Strip's HTTP 400, and scene replacement.
+ * temperature" behavior, the Light Strip's HTTP 400, and scene replacement: a bare
+ * write destroys a scene and reverts to the previous HSV state, a scene body with
+ * `on: 0` parks the strip off with the scene kept, and a bare `on: 1` from there does
+ * not resume it (§8 and the addendum). `sceneFaults` makes the Strip reject scene
+ * bodies, `fault` drops or stalls requests, and `requests` keeps every raw PUT body
+ * for byte-level assertions.
  *
  * `npm run mock` starts one of each on ports 9123 and 9124 and advertises them on
  * `_elg._tcp`. Add `--mk2` to also advertise a Key Light Air MK.2, which is the
@@ -32,6 +37,8 @@ export { RAINBOW_SCENE, MOCK_MODELS, type MockModel } from "./mock-elgato-models
 export { MockKeyLightAirMk2 } from "./mock-elgato-mk2.ts";
 
 const PARSE_ERROR = { errors: [{ message: "Fail to parse JSON data", code: -1 }] };
+/** What the mock answers a scene body rejected with 500 (see `sceneFaults`). */
+const INTERNAL_ERROR = { errors: [{ message: "Internal error", code: -1 }] };
 
 const isSceneBody = (patch: LightPatch): boolean =>
   Array.isArray(patch.scene) && patch.scene.length > 0;
@@ -45,6 +52,15 @@ export interface MockElgatoOptions {
   instanceName?: string;
 }
 
+/** One request the mock saw. */
+export interface MockRequest {
+  method: string;
+  path: string;
+  headers: IncomingHttpHeaders;
+  /** Raw body of a PUT, exactly as it arrived on the wire. */
+  body?: string;
+}
+
 export class MockElgatoDevice {
   readonly model: MockModel;
   readonly info: AccessoryInfo;
@@ -52,13 +68,21 @@ export class MockElgatoDevice {
   /** Non-scene state; the Strip falls back to this when a scene is destroyed. */
   light: LightState;
   scene: LightState | undefined;
-  /** Every request seen, for assertions. */
-  readonly requests: { method: string; path: string; headers: IncomingHttpHeaders }[] = [];
+  /** Every request seen, for assertions. `body` is the raw PUT body, byte for byte. */
+  readonly requests: MockRequest[] = [];
   /**
    * Inject failures without unplugging anything: `errors200` reproduces the Strip's
-   * "error object with HTTP 200", `offline` drops the connection.
+   * "error object with HTTP 200", `offline` drops the connection, and `hang` takes
+   * the request (body included) and never answers, so the client times out.
    */
-  fault: "none" | "errors200" | "offline" = "none";
+  fault: "none" | "errors200" | "offline" | "hang" = "none";
+  /**
+   * Light Strip only: answer the next PUTs that carry a scene body with these statuses,
+   * one per PUT, and leave the state alone, so the plugin's scene-preserving off has
+   * to fall back. `"garbled"` applies the body and then answers 200 with a truncated
+   * reply. Bare writes are unaffected and do not consume an entry.
+   */
+  sceneFaults: (400 | 500 | "garbled")[] = [];
 
   #server: Server | undefined;
   #bonjour: Bonjour | undefined;
@@ -134,11 +158,20 @@ export class MockElgatoDevice {
 
   #handle(request: IncomingMessage, response: ServerResponse): void {
     const path = (request.url ?? "").split("?")[0] ?? "";
-    this.requests.push({ method: request.method ?? "GET", path, headers: request.headers });
+    const seen: MockRequest = { method: request.method ?? "GET", path, headers: request.headers };
+    this.requests.push(seen);
 
     if (this.fault === "offline") {
       request.destroy();
       response.destroy();
+      return;
+    }
+    if (this.fault === "hang") {
+      this.#readBody(request)
+        .then((raw) => {
+          seen.body = raw;
+        })
+        .catch(() => undefined);
       return;
     }
     if (this.fault === "errors200") {
@@ -175,8 +208,9 @@ export class MockElgatoDevice {
 
     if (request.method === "PUT" && path === "/elgato/lights") {
       this.#readBody(request)
-        .then((body) => {
-          this.#putLights(response, body);
+        .then((raw) => {
+          seen.body = raw;
+          this.#putLights(response, JSON.parse(raw) as unknown);
         })
         .catch(() => {
           this.#json(response, 400, PARSE_ERROR);
@@ -187,10 +221,10 @@ export class MockElgatoDevice {
     this.#notFound(response);
   }
 
-  async #readBody(request: IncomingMessage): Promise<unknown> {
+  async #readBody(request: IncomingMessage): Promise<string> {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(chunk as Buffer);
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+    return Buffer.concat(chunks).toString("utf8");
   }
 
   #putLights(response: ServerResponse, body: unknown): void {
@@ -201,6 +235,19 @@ export class MockElgatoDevice {
     }
     const patch = lights[0] as LightPatch;
 
+    const sceneFault =
+      this.model === "light-strip" && isSceneBody(patch) ? this.sceneFaults.shift() : undefined;
+    if (sceneFault === "garbled") {
+      this.#applyStrip(patch);
+      const payload = JSON.stringify({ numberOfLights: 1, lights: [this.currentState] });
+      response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
+      response.end(payload.slice(0, payload.length / 2));
+      return;
+    }
+    if (sceneFault !== undefined) {
+      this.#json(response, sceneFault, sceneFault === 400 ? PARSE_ERROR : INTERNAL_ERROR);
+      return;
+    }
     if (this.model === "light-strip" && !this.#applyStrip(patch)) {
       this.#json(response, 400, PARSE_ERROR);
       return;

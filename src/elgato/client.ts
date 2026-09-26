@@ -18,6 +18,8 @@ export interface ElgatoHttpErrorOptions {
   body?: string;
   /** See `ElgatoHttpError.emptyReply`. */
   emptyReply?: boolean;
+  /** See `ElgatoHttpError.refused`. */
+  refused?: boolean;
 }
 
 export class ElgatoHttpError extends Error {
@@ -30,6 +32,12 @@ export class ElgatoHttpError extends Error {
    * (src/elgato/unsupported.ts). An offline light times out or refuses instead.
    */
   readonly emptyReply: boolean;
+  /**
+   * The device answered and said no: an HTTP error status, or an `errors` body. False
+   * when no answer came, and for a 200 whose body did not parse (a truncated reply),
+   * since either way the request may still have been applied.
+   */
+  readonly refused: boolean;
 
   constructor(message: string, status: number, options: ElgatoHttpErrorOptions = {}) {
     super(message);
@@ -37,6 +45,7 @@ export class ElgatoHttpError extends Error {
     this.status = status;
     this.body = options.body;
     this.emptyReply = options.emptyReply === true;
+    this.refused = options.refused === true;
   }
 }
 
@@ -128,6 +137,7 @@ export class ElgatoClient {
     if (!response.ok) {
       throw new ElgatoHttpError(`${method} ${url} returned ${response.status}`, response.status, {
         body: text,
+        refused: response.status >= 400,
       });
     }
 
@@ -147,7 +157,7 @@ export class ElgatoClient {
       throw new ElgatoHttpError(
         `${method} ${url} returned an error body: ${message}`,
         response.status,
-        { body: text },
+        { body: text, refused: true },
       );
     }
 

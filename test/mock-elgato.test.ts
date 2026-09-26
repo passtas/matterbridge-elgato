@@ -133,6 +133,58 @@ describe("Light Strip PUT semantics", () => {
     expect(parked?.scene).toHaveLength(6);
   });
 
+  it("still serves the scene schema on a GET after parking it with `on: 0`", async () => {
+    const { client } = await boot("light-strip");
+    await client.putLights({ ...RAINBOW_SCENE, on: 0 });
+    const state = (await client.getLights()).lights[0];
+    expect(state).toMatchObject({ on: 0, id: "com.corsair.cc.scene.rainbow" });
+    expect(state?.scene).toHaveLength(6);
+  });
+
+  it("drops a parked scene on a bare off and reverts to the previous HSV state", async () => {
+    const { client } = await boot("light-strip");
+    await client.putLights({ ...RAINBOW_SCENE, on: 0 });
+    const state = (await client.putLights({ on: 0 })).lights[0];
+    expect(state).toEqual({ on: 0, hue: 200, saturation: 100, brightness: 50 });
+  });
+
+  it.each([400, 500] as const)(
+    "can be told to answer the next scene body with %i and leave the state alone",
+    async (status) => {
+      const { mock, client } = await boot("light-strip");
+      await client.putLights(RAINBOW_SCENE);
+      mock.sceneFaults = [status];
+      await expect(client.putLights({ ...RAINBOW_SCENE, on: 0 })).rejects.toMatchObject({
+        status,
+      });
+      expect(mock.currentState).toMatchObject({ on: 1, id: "com.corsair.cc.scene.rainbow" });
+      // One entry, one rejection: the next scene body goes through.
+      expect((await client.putLights({ ...RAINBOW_SCENE, on: 0 })).lights[0]?.on).toBe(0);
+      // Bare writes are never rejected, so a fallback off lands.
+      mock.sceneFaults = [status];
+      expect((await client.putLights({ on: 0 })).lights[0]).toMatchObject({ on: 0, hue: 200 });
+      expect(mock.sceneFaults).toEqual([status]);
+    },
+  );
+
+  it("can stall a request so the client times out, and still records its body", async () => {
+    const mock = new MockElgatoDevice({ model: "light-strip" });
+    started.push(mock);
+    const client = new ElgatoClient("127.0.0.1", { port: await mock.start(), timeoutMs: 100 });
+    mock.fault = "hang";
+    await expect(client.putLights({ on: 0 })).rejects.toMatchObject({ status: 0 });
+    expect(mock.requests.at(-1)?.body).toBe('{"numberOfLights":1,"lights":[{"on":0}]}');
+  });
+
+  it("records each PUT body exactly as it arrived", async () => {
+    const { mock, client } = await boot("light-strip");
+    await client.putLights({ on: 0 });
+    expect(mock.requests.at(-1)).toMatchObject({
+      method: "PUT",
+      body: '{"numberOfLights":1,"lights":[{"on":0}]}',
+    });
+  });
+
   it("truncates fractional hue and saturation like the firmware", async () => {
     const { client } = await boot("light-strip");
     const state = (await client.putLights({ hue: 123.7, saturation: 50.5 })).lights[0];

@@ -92,23 +92,35 @@ export abstract class ElgatoDevice {
 
   /**
    * Queue a PUT, then feed the echoed full state back into the attributes.
+   * A rejected write is logged at error and otherwise swallowed.
    * Returns whether the device accepted the write; callers that update their own
    * bookkeeping on success (scene resume) need to know.
    */
   protected async write(patch: LightPatch, skip: readonly OwnedAttribute[] = []): Promise<boolean> {
     try {
-      const response = await this.queue.push(patch);
-      const light = response.lights[0];
-      // The PUT response is byte-identical to a following GET, so never re-GET
-      // to confirm (docs/elgato-protocol.md §5).
-      if (light) await this.applyState(light, { skip, command: true });
-      await this.setReachable(true);
+      await this.applyEcho(await this.queue.push(patch), skip);
       return true;
     } catch (error) {
       // Do not fail the Matter command: log it and let the next poll reconcile.
       this.log.error(`${this.deviceName} did not accept the change: ${(error as Error).message}`);
       return false;
     }
+  }
+
+  /**
+   * Feed a PUT response into the attributes. Split out of `write` for a caller that
+   * has to tell a rejected PUT apart from a failure after it (the Light Strip's
+   * scene-preserving off).
+   */
+  protected async applyEcho(
+    response: LightsResponse,
+    skip: readonly OwnedAttribute[] = [],
+  ): Promise<void> {
+    const light = response.lights[0];
+    // The PUT response is byte-identical to a following GET, so never re-GET
+    // to confirm (docs/elgato-protocol.md §5).
+    if (light) await this.applyState(light, { skip, command: true });
+    await this.setReachable(true);
   }
 
   /**

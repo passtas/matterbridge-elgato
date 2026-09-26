@@ -49,3 +49,11 @@ export const colorDebounceMs = (config: PlatformConfig): number => {
 };
 
 export const mdnsEnabled = (config: PlatformConfig): boolean => config.enableMdns !== false;
+
+/**
+ * Light Strip only: switch off by re-sending the cached scene with `on: 0`, so the
+ * strip parks with its scene intact (docs/elgato-protocol.md, addendum). Off unless
+ * set to exactly `true`, because it changes what is stored on the user's light.
+ */
+export const preserveSceneOnOff = (config: PlatformConfig): boolean =>
+  config.preserveSceneOnOff === true;

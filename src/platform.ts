@@ -17,6 +17,7 @@ import {
   manualDevices,
   mdnsEnabled,
   pollIntervalMs,
+  preserveSceneOnOff,
   SHUTDOWN_FLUSH_TIMEOUT_MS,
 } from "./config.ts";
 import { ElgatoClient, ElgatoHttpError, parseHost } from "./elgato/client.ts";
@@ -270,7 +271,11 @@ export class ElgatoPlatform extends MatterbridgeDynamicPlatform {
     const device =
       capability === "ct"
         ? new KeyLightDevice(context)
-        : new LightStripDevice({ ...context, sceneStore: this.#sceneStore });
+        : new LightStripDevice({
+            ...context,
+            sceneStore: this.#sceneStore,
+            preserveSceneOnOff: preserveSceneOnOff(this.config),
+          });
 
     this.registry.add({ serial, client, info, capability });
     this.devices.set(serial, device);

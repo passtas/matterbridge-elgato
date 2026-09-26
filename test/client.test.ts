@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { MockKeyLightAirMk2 } from "../scripts/mock-elgato-mk2.ts";
-import { MockElgatoDevice } from "../scripts/mock-elgato.ts";
+import { MockElgatoDevice, RAINBOW_SCENE } from "../scripts/mock-elgato.ts";
 import { ElgatoClient, ElgatoHttpError } from "../src/elgato/client.ts";
 
 /** Real HTTP against the mock on an ephemeral port, no fetch mocking anywhere. */
@@ -58,6 +58,29 @@ describe("ElgatoClient", () => {
     strip.fault = "errors200";
     try {
       await expect(stripClient.getLights()).rejects.toThrow(/error body/);
+    } finally {
+      strip.fault = "none";
+    }
+  });
+
+  it("marks only an answer that says no as `refused`", async () => {
+    // An HTTP error status, or an `errors` body on 200: the device refused.
+    await expect(stripClient.putLights({ hue: 400 })).rejects.toMatchObject({ refused: true });
+    strip.fault = "errors200";
+    try {
+      await expect(stripClient.getLights()).rejects.toMatchObject({ refused: true });
+    } finally {
+      strip.fault = "none";
+    }
+    // A 200 that does not parse, or no answer at all: the write may still have landed.
+    strip.sceneFaults = ["garbled"];
+    await expect(stripClient.putLights(RAINBOW_SCENE)).rejects.toMatchObject({
+      status: 200,
+      refused: false,
+    });
+    strip.fault = "offline";
+    try {
+      await expect(stripClient.getLights()).rejects.toMatchObject({ status: 0, refused: false });
     } finally {
       strip.fault = "none";
     }
