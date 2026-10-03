@@ -1,6 +1,6 @@
 {
   "title": "Matterbridge Elgato plugin",
-  "description": "matterbridge-elgato v. 0.1.0 by https://github.com/passtas",
+  "description": "matterbridge-elgato v. 0.2.0 by https://github.com/passtas",
   "type": "object",
   "properties": {
     "name": {

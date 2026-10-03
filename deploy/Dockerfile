@@ -9,14 +9,14 @@
 #
 #   npm run build && npm pack && mv matterbridge-elgato-*.tgz deploy/
 #   docker build -t matterbridge-elgato:dev \
-#     --build-arg PLUGIN_TARBALL=matterbridge-elgato-0.1.0.tgz deploy
+#     --build-arg PLUGIN_TARBALL=matterbridge-elgato-0.2.0.tgz deploy
 #
 # ...which is exactly what deploy/docker-compose.yml and the publish workflow do.
 #
 FROM luligu/matterbridge:latest
 
-ARG PLUGIN_TARBALL=matterbridge-elgato-0.1.0.tgz
-ARG PLUGIN_VERSION=0.1.0
+ARG PLUGIN_TARBALL=matterbridge-elgato-0.2.0.tgz
+ARG PLUGIN_VERSION=0.2.0
 
 LABEL org.opencontainers.image.title="matterbridge-elgato" \
       org.opencontainers.image.description="Matterbridge with the Elgato light plugin pre-installed: Elgato Key Light, Key Light Air and Light Strip in Google Home, Apple Home and Alexa over Matter" \

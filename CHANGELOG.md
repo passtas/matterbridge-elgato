@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.0] - 2026-10-03
 
 ### Added
 
@@ -29,8 +29,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Key Light Mini battery on Matter (#2). A light that answers
   `GET /elgato/battery-info` gets the battery (Battery + Rechargeable) variant of
-  the PowerSource cluster instead of the wired one, so Google Home, Apple Home
-  and Alexa can show its charge and warn when it runs low:
+  the PowerSource cluster instead of the wired one, which is where Matter
+  controllers read a battery from. Whether each controller shows it is still
+  being checked (#12); Google Home has not shown it on an already-paired Mini
+  so far. The cluster carries
   `batPercentRemaining` (half-percent units), `batChargeLevel` (Warning below
   20 %, Critical below 10 %), `batChargeState` (charging, full, not charging)
   and `batVoltage`. The battery is detected by asking that endpoint once per
