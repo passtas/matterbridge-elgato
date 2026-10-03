@@ -34,8 +34,11 @@ automations, and it comes back under the same endpoint number. The
 bridge reports the new features to each controller when it reconnects, but
 whether a controller redraws the device without help is up to the controller.
 If it still shows no battery a few minutes later, restart the controller's hub
-(the Nest or HomePod). Removing and re-pairing the whole bridge also works, but
-costs every room and automation, so treat it as the last resort. A light
+(the Nest or HomePod). Removing and re-pairing the whole bridge may also help,
+but costs every room and automation, so treat it as the last resort. So far
+Google Home has not shown the battery on an already-paired Mini, even after
+reopening the app; whether any controller shows it is tracked in
+[#12](https://github.com/passtas/matterbridge-elgato/issues/12). A light
 that answers but not its battery probe (`… did not answer its battery probe`
 in the log) is not added yet; it is retried like a light that is off, and added
 once it answers. After three tries it is added without a battery (`battery not
