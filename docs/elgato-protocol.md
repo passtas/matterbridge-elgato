@@ -4,7 +4,7 @@ Characterisation of the Elgato local-control protocol, for the
 `elgato-matter-bridge` project.
 
 **Every fact below is tagged with the date it was verified and the device it
-was verified on.** Two tags are used:
+was verified on.** These tags are used:
 
 - `[2026-09-04 · KLA]` – verified live on **Elgato Key Light Air**,
   fw `1.0.3` (build 222), `hardwareBoardType` 200, serial `CW33J1A00001`,
@@ -12,11 +12,15 @@ was verified on.** Two tags are used:
 - `[2026-09-04 · STRIP]` – verified live on **Elgato Light Strip**,
   fw `1.0.4` (build 233), `hardwareBoardType` 70, serial `EW52J1A00002`,
   at `192.168.1.51`.
+- `[2026-10-03 · MINI]` – verified live on **Elgato Key Light Mini**,
+  fw `1.0.4` (build 240), `hardwareBoardType` 202, on 5 GHz Wi-Fi. Serial and
+  address are left out on purpose. What was and was not exercised is in
+  [§3, Key Light Mini](#key-light-mini).
 - `[prior-art]` – not verified here; taken from public reverse-engineering
   (see Sources). Treat as unconfirmed until a device proves it.
 
-Both devices were restored byte-identically to their pre-test state after
-characterisation (verified by md5 of `GET /elgato/lights`).
+The Key Light Air and the Light Strip were restored byte-identically to their
+pre-test state after characterisation (verified by md5 of `GET /elgato/lights`).
 
 ---
 
@@ -81,13 +85,13 @@ concluding a device is absent.
 | **70**  | **Elgato Light Strip**      | `[2026-09-04 · STRIP]`      |
 | **200** | **Elgato Key Light Air**    | `[2026-09-04 · KLA]`        |
 | 201     | Elgato Ring Light           | `[prior-art]`               |
-| 202     | Elgato Key Light Mini       | `[prior-art]`               |
+| **202** | **Elgato Key Light Mini**   | `[2026-10-03 · MINI]`       |
 | 205     | Elgato Key Light MK.2       | `[prior-art]`               |
 | 206     | Elgato Light Strip Pro      | `[prior-art]`               |
 | 210     | Elgato Key Light Neo        | `[prior-art]`               |
 | 214     | Elgato Key Light Air MK.2   | `[prior-art]`               |
 
-The codes above other than 70 and 200 come from `BOARD_TYPES` in
+The codes above other than 70, 200 and 202 come from `BOARD_TYPES` in
 frenck/python-elgato. There is no "Light Strip Neo"; the second strip is the
 Light Strip Pro (206). The MK.2 Key Light Air (214) does not speak this HTTP
 API at all; it wants mutual TLS on the same port, and the plugin skips it
@@ -158,7 +162,7 @@ Verified by probing every path on both devices `[2026-09-04 · KLA, STRIP]`:
 | `PUT /elgato/accessory-info`  | not tested                     | not tested             | sets `displayName` `[prior-art]`                                                                                                                                      |
 | `GET /elgato/lights/settings` | 200 (148 B)                    | 200 (166 B)            | power-on defaults                                                                                                                                                     |
 | `PUT /elgato/lights/settings` | not tested                     | not tested             | `[prior-art]`                                                                                                                                                         |
-| `GET /elgato/battery-info`    | **404**                        | **404**                | Key Light Mini only `[prior-art]`                                                                                                                                     |
+| `GET /elgato/battery-info`    | **404**                        | **404**                | Key Light Mini only `[prior-art]`; 200 there `[2026-10-03 · MINI]`, shape in [Key Light Mini](#key-light-mini)                                                        |
 | `GET /elgato/identify`        | 404                            | 404                    | POST-only endpoint `[prior-art]`; not exercised                                                                                                                       |
 | `GET /elgato/wifi-info`       | 404                            | 404                    | write-only path; Wi-Fi is read via `accessory-info.wifi-info`                                                                                                         |
 | `GET /elgato/scenes`          | 404                            | 404                    | does not exist                                                                                                                                                        |
@@ -221,7 +225,9 @@ Notes:
   `[prior-art]` reports it as a number on other models. Parse loosely.
 - `features` is `["lights"]` on both. `[prior-art]`: Key Light Neo reports
   `["lights","bt","hid"]`. Use `features` as the capability probe for
-  battery/BT extras.
+  BT extras, but not for the battery: the Key Light Mini also reports
+  `["lights"]` and still answers `GET /elgato/battery-info` with 200
+  `[2026-10-03 · MINI]`. Probe that endpoint instead.
 - `displayName` was non-empty on both here, but `[prior-art]` says it is often
   `""` – fall back to the mDNS instance name.
 - **Never PUT to this endpoint from the bridge** unless the user explicitly
@@ -261,6 +267,97 @@ Notes:
 `[prior-art]`. The `switch*DurationMs` / `colorChangeDurationMs` values are the
 device-side fade times – they explain why a `PUT` is acknowledged before the
 light has visibly finished changing.
+
+### Key Light Mini
+
+`[2026-10-03 · MINI]` One Key Light Mini, fw `1.0.4` (build 240), on 5 GHz
+Wi-Fi on the same Google Nest Wifi mesh, bridge host wired. Read live; **no
+fixtures were captured** for it.
+
+What was exercised: `npm run test:live` passed with the Mini as
+`ELGATO_KEY_LIGHT_HOST` (on/off, brightness that never emits 0, color
+temperature including clamping, poll-loop state reflection, and
+`moveToLevelWithOnOff` at level 1 treated as an off), and Google Home (Nest hub
+as controller) drove on, off, brightness and color temperature through the
+production bridge on published v0.1.1, with no errors or timeouts in the bridge
+log. **Not exercised:** §6 range validation – whether the Mini ignores or
+rejects out-of-range values is unknown.
+
+mDNS TXT, `id` omitted:
+
+| Key  | MINI                              |
+| ---- | --------------------------------- |
+| `pv` | `1.0`                             |
+| `md` | `Elgato Key Light Mini 20LAD9901` |
+| `dt` | `202`                             |
+| `mf` | `Elgato`                          |
+
+So the model number the light reports is `20LAD9901`; `10LAD9901` is the retail
+box number.
+
+`accessory-info` has the usual fields (shapes above), with
+`hardwareBoardType: 202` and `features: ["lights"]` – no hint of the battery.
+
+`GET /elgato/lights` uses the **§4a CCT schema**, unchanged:
+
+```json
+{ "numberOfLights": 1, "lights": [{ "on": 1, "brightness": 23, "temperature": 143 }] }
+```
+
+`GET /elgato/battery-info` answers **200** (it is a 404 on the KLA and the
+Strip). Taken while charging over USB-C:
+
+```json
+{
+  "powerSource": 1,
+  "level": 96.05,
+  "status": 2,
+  "currentBatteryVoltage": 4007,
+  "inputChargeVoltage": 4208,
+  "inputChargeCurrent": 3008
+}
+```
+
+The shape matches the one
+[#2](https://github.com/passtas/matterbridge-elgato/issues/2) documents from
+prior art. From this one reading only: `powerSource` was `1` on USB-C power,
+`level` is a fractional percent, and `status` was `2` while charging. Other
+values, and the units of the three voltage/current fields, are not established
+here.
+
+`GET /elgato/lights/settings` is the KLA shape plus a `battery` object
+(`powerOnTemperature` differs only because it is a user setting):
+
+```json
+{
+  "powerOnBehavior": 1,
+  "powerOnBrightness": 20,
+  "powerOnTemperature": 230,
+  "switchOnDurationMs": 100,
+  "switchOffDurationMs": 300,
+  "colorChangeDurationMs": 100,
+  "battery": {
+    "energySaving": {
+      "enable": 0,
+      "minimumBatteryLevel": 15.00,
+      "disableWifi": 0,
+      "adjustBrightness": { "enable": 0, "brightness": 10.00 }
+    },
+    "bypass": 0
+  }
+}
+```
+
+`minimumBatteryLevel` and `adjustBrightness.brightness` arrive with two
+decimals, one more reason to parse numbers loosely (§10, item 9). Beyond their
+names, what these fields do is not established; none of them was written.
+
+> **Observation, not a rule.** The Mini occasionally answers slowly: one
+> `accessory-info` request timed out at 4 s before a retry succeeded. Too few
+> samples to say how often, and §2's latency table was not repeated on it.
+
+The plugin does not report the battery yet
+([#2](https://github.com/passtas/matterbridge-elgato/issues/2)).
 
 ---
 
