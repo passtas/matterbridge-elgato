@@ -65,6 +65,30 @@ It is off by default because it changes what is stored on your light, and it
 earns a default only after a release of reports from real strips. It does nothing
 on Key Lights, which have no scenes, or on a strip showing a plain color.
 
+## Key Light Mini battery
+
+A light that answers `GET /elgato/battery-info` (today only the Key Light Mini)
+reports its battery to Matter on the PowerSource cluster, so the controller can
+show the charge and raise a low-battery alert. Nothing needs configuring, and
+nothing here is configurable yet:
+
+- **Charge level.** Warning below 20 %, Critical below 10 %. Elgato's own
+  energy-saving threshold defaults to 15 %, so with energy saving on the light
+  dims or drops off Wi-Fi a little after the Warning.
+- **How often.** The battery is read on every Nth poll, about every 30 seconds
+  whatever `pollInterval` is, so unplugging or plugging the USB-C cable shows up
+  within about 30 seconds rather than within one `pollInterval`.
+- **Small wobbles are not reported.** The light's own readings jitter between
+  reads, so the percentage is only re-reported after a move of 1 % or more (or
+  when it crosses 20 % or 10 %, or reaches 0 % or 100 %), and the voltage after
+  a move of 20 mV. Charging state and the low-battery level change at once.
+- **What is never touched.** The plugin only reads the battery. Energy saving
+  and battery bypass stay in Elgato's app.
+
+Each light is asked once, when it is added, whether it has a battery; one that
+answers 404 is never asked again. One that does not answer is retried like a
+light that is off, and added once it does.
+
 ## Device names and identity
 
 Matter identifies a bridged device by a hash of its name, serial number, vendor

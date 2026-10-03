@@ -38,6 +38,7 @@ import {
   ElgatoDevice,
   type OwnedAttribute,
   VENDOR_NAME,
+  withPowerSource,
 } from "./shared.ts";
 
 /**
@@ -100,7 +101,7 @@ export class LightStripDevice extends ElgatoDevice {
   }
 
   protected override createEndpoint(context: DeviceContext): MatterbridgeEndpoint {
-    return new MatterbridgeEndpoint(
+    const endpoint = new MatterbridgeEndpoint(
       [extendedColorLight, bridgedNode, powerSource],
       { id: context.serial },
       context.debug,
@@ -119,9 +120,8 @@ export class LightStripDevice extends ElgatoDevice {
       )
       .createDefaultOnOffClusterServer()
       .createDefaultLevelControlClusterServer()
-      .createDefaultColorControlClusterServer()
-      .createDefaultPowerSourceWiredClusterServer()
-      .addRequiredClusterServers();
+      .createDefaultColorControlClusterServer();
+    return withPowerSource(endpoint, context.battery).addRequiredClusterServers();
   }
 
   protected override registerHandlers(): void {

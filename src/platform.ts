@@ -14,6 +14,7 @@ import type { AnsiLogger } from "matterbridge/logger";
 import { fireAndForget } from "matterbridge/utils";
 
 import {
+  batteryPollEvery,
   colorDebounceMs,
   DISCOVERY_WINDOW_MS,
   type ManualDevice,
@@ -36,7 +37,7 @@ import {
 import { ElgatoDiscovery, isMdnsName, normalizeName } from "./elgato/discovery.ts";
 import { DeviceRegistry } from "./elgato/registry.ts";
 import { advertisedModel, UnsupportedDevices, usesTlsTransport } from "./elgato/unsupported.ts";
-import type { AccessoryInfo, DiscoveredService } from "./elgato/types.ts";
+import type { AccessoryInfo, BatteryInfo, DiscoveredService } from "./elgato/types.ts";
 import { KeyLightDevice } from "./devices/keyLight.ts";
 import { LightStripDevice } from "./devices/lightStrip.ts";
 import type { SceneStore } from "./devices/scenes.ts";
@@ -70,6 +71,18 @@ type ProbeOutcome =
   | { kind: "unreachable"; error: Error }
   | { kind: "busy" }
   | { kind: "dropped" };
+
+/**
+ * The light answered, but its battery probe did not. The PowerSource features cannot
+ * change once the endpoint is built, so the whole registration probe counts as
+ * unanswered and goes to the retry queue rather than building a guess.
+ */
+class BatteryProbeUnanswered extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BatteryProbeUnanswered";
+  }
+}
 
 /** A light whose probe failed for a transport reason, waiting for its next try. */
 export interface PendingProbe {
@@ -543,6 +556,8 @@ export class ElgatoPlatform extends MatterbridgeDynamicPlatform {
       const device = await this.#registerLight(host, client, info, options);
       return device ? { kind: "registered", device } : { kind: "dropped" };
     } catch (error) {
+      // Before the MK.2 check: a dropped battery probe can look like an empty reply.
+      if (error instanceof BatteryProbeUnanswered) return { kind: "unreachable", error };
       if (error instanceof ElgatoHttpError && error.status === 0) {
         // An MK.2 light accepts the connection and then closes it without answering.
         // Not proof on its own, so this one is retried later (elgato/unsupported.ts).
@@ -598,6 +613,10 @@ export class ElgatoPlatform extends MatterbridgeDynamicPlatform {
       return undefined;
     }
 
+    // Before the endpoint exists: the answer picks the PowerSource feature set, and
+    // matter.js fixes that when the endpoint is built.
+    const battery = await this.#probeBattery(client, deviceName);
+    if (this.#stopped) return undefined;
     const context: DeviceContext = {
       serial,
       deviceName,
@@ -607,6 +626,9 @@ export class ElgatoPlatform extends MatterbridgeDynamicPlatform {
       vendorId: this.matterbridge.aggregatorVendorId,
       debug: this.config.debug === true,
       colorDebounceMs: colorDebounceMs(this.config),
+      ...(battery === undefined
+        ? {}
+        : { battery, batteryPollEvery: batteryPollEvery(this.config) }),
     };
     const device =
       capability === "ct"
@@ -632,9 +654,29 @@ export class ElgatoPlatform extends MatterbridgeDynamicPlatform {
     this.log.notice(
       `Registered ${deviceTypeName(info.hardwareBoardType)} "${deviceName}" (${serial}) at ${host} as ${
         capability === "ct" ? "colorTemperatureLight" : "extendedColorLight"
-      }`,
+      }${battery === undefined ? "" : ` with its battery at ${Math.round(battery.level)} %`}`,
     );
     return device;
+  }
+
+  /**
+   * Ask the light once whether it has a battery (ElgatoClient.probeBattery). A light
+   * that answers 404 is never asked again, and that is logged at debug only, so a Key
+   * Light Air or a Light Strip costs one request at registration and nothing in the
+   * log. A probe that gets no usable answer throws `BatteryProbeUnanswered`, which
+   * `#probe` reports as `unreachable`: the light is not built until its answer is
+   * known, because the endpoint cannot change its PowerSource features later.
+   */
+  async #probeBattery(client: ElgatoClient, deviceName: string): Promise<BatteryInfo | undefined> {
+    try {
+      const battery = await client.probeBattery();
+      if (battery === undefined) this.log.debug(`${deviceName} has no battery`);
+      return battery;
+    } catch (error) {
+      throw new BatteryProbeUnanswered(
+        `${deviceName} did not answer its battery probe: ${(error as Error).message}`,
+      );
+    }
   }
 
   /** Refresh an already-registered device's address and label. */

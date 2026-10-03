@@ -1,16 +1,30 @@
 /**
  * Shared plumbing for the two Elgato device flavours: endpoint identity, the write
- * queue, reachability tracking and the seed/poll cycle. The endpoint shape, the
- * command handlers and the state mapping come from the subclasses.
+ * queue, reachability tracking, the seed/poll cycle and the PowerSource cluster
+ * (wired, or the battery of a Key Light Mini). The endpoint shape, the command
+ * handlers and the state mapping come from the subclasses.
  */
 
 import type { MatterbridgeEndpoint } from "matterbridge";
 import type { AnsiLogger } from "matterbridge/logger";
-import { BridgedDeviceBasicInformation } from "matterbridge/matter/clusters";
+import { BridgedDeviceBasicInformation, PowerSource } from "matterbridge/matter/clusters";
 import type { ClusterId } from "matterbridge/matter/types";
 
 import type { ElgatoClient } from "../elgato/client.ts";
-import type { AccessoryInfo, LightPatch, LightState, LightsResponse } from "../elgato/types.ts";
+import type {
+  AccessoryInfo,
+  BatteryInfo,
+  LightPatch,
+  LightState,
+  LightsResponse,
+} from "../elgato/types.ts";
+import {
+  batteryUpdate,
+  toBatChargeLevel,
+  toBatChargeState,
+  toMatterBatPercent,
+  toMatterBatVoltage,
+} from "../mapping.ts";
 import { WriteQueue } from "../writeQueue.ts";
 
 export const VENDOR_NAME = "Elgato";
@@ -51,7 +65,47 @@ export interface DeviceContext {
   debug: boolean;
   /** Hue/saturation debounce window, ms. Controllers send the two as separate commands. */
   colorDebounceMs: number;
+  /**
+   * The first battery reading, present only when the battery probe said yes. It decides
+   * the PowerSource feature set, which is fixed once the endpoint is built.
+   */
+  battery?: BatteryInfo;
+  /** Read `battery-info` on every Nth successful poll tick (config.ts `batteryPollEvery`). */
+  batteryPollEvery?: number;
 }
+
+/**
+ * Put the PowerSource cluster on a light's endpoint: Wired for a light on mains, or
+ * Battery + Rechargeable for a light with a battery. Matter makes Wired and Battery
+ * mutually exclusive features of one cluster instance, and matter.js fixes the
+ * features when the endpoint is built, so this has to know the probe's answer first.
+ * See docs/matterbridge-api-cheatsheet.md §3.
+ */
+export const withPowerSource = (
+  endpoint: MatterbridgeEndpoint,
+  battery: BatteryInfo | undefined,
+): MatterbridgeEndpoint => {
+  if (battery === undefined) return endpoint.createDefaultPowerSourceWiredClusterServer();
+  // The helper takes whole percent and doubles it without rounding, so 96.05 would
+  // land as 192.1. Hand it the already-rounded half-percent count, halved back.
+  const halfPercents = toMatterBatPercent(battery.level);
+  endpoint.createDefaultPowerSourceRechargeableBatteryClusterServer(
+    halfPercents === null ? null : halfPercents / 2,
+    toBatChargeLevel(battery.level) as PowerSource.BatChargeLevel,
+    toMatterBatVoltage(battery.currentBatteryVoltage),
+    PowerSource.BatReplaceability.NotReplaceable,
+  );
+  // The helper hard-codes batChargeState IsNotCharging and takes no argument for it,
+  // and setAttribute refuses an endpoint that is not registered yet. The options
+  // object the helper handed to `behaviors.require` is what matter.js reads the
+  // initial state from (Behaviors.defaultsFor), so set the probed state there.
+  const powerSourceType = endpoint.behaviors.supported["powerSource"];
+  const options = powerSourceType && endpoint.behaviors.optionsFor(powerSourceType);
+  if (options) {
+    Object.assign(options, { batChargeState: toBatChargeState(battery.status) });
+  }
+  return endpoint;
+};
 
 export abstract class ElgatoDevice {
   readonly serial: string;
@@ -60,6 +114,13 @@ export abstract class ElgatoDevice {
   protected readonly client: ElgatoClient;
   protected readonly log: AnsiLogger;
   protected readonly queue: WriteQueue;
+  /** Whether the endpoint carries the battery variant of PowerSource. Fixed for its lifetime. */
+  readonly hasBattery: boolean;
+  readonly #batteryPollEvery: number;
+  /** The probe's reading, handed to the first seed so it need not ask again. */
+  #probedBattery: BatteryInfo | undefined;
+  /** Successful poll ticks, to read the battery on every Nth. */
+  #ticks = 0;
   #failures = 0;
   #reachable = true;
 
@@ -68,6 +129,9 @@ export abstract class ElgatoDevice {
     this.deviceName = context.deviceName;
     this.client = context.client;
     this.log = context.log;
+    this.hasBattery = context.battery !== undefined;
+    this.#probedBattery = context.battery;
+    this.#batteryPollEvery = Math.max(1, Math.floor(context.batteryPollEvery ?? 1));
     this.queue = new WriteQueue((patch) => this.client.putLights(patch));
     this.endpoint = this.createEndpoint(context);
     this.registerHandlers();
@@ -81,13 +145,75 @@ export abstract class ElgatoDevice {
   /** Unconditional one-shot state push, for `onConfigure` once the server node is online. */
   async seed(): Promise<void> {
     const light = await this.readLight();
-    if (light) await this.applyState(light, { seed: true });
+    if (!light) return;
+    await this.applyState(light, { seed: true });
+    await this.#readBattery(true);
   }
 
-  /** Diffing state push on the poll interval, plus reachability bookkeeping. */
+  /**
+   * Diffing state push on the poll interval, plus reachability bookkeeping. A light
+   * with a battery also has `battery-info` read on every Nth tick, in this same tick
+   * rather than on a timer of its own, and only when the light answered: an offline
+   * light would otherwise cost a second timeout per tick (docs/elgato-protocol.md §2,
+   * the firmware serves one request at a time).
+   */
   async poll(): Promise<void> {
     const light = await this.readLight();
-    if (light) await this.applyState(light);
+    if (!light) return;
+    await this.applyState(light);
+    this.#ticks += 1;
+    if (this.#ticks % this.#batteryPollEvery === 0) await this.#readBattery(false);
+  }
+
+  /**
+   * Read the battery and push it into PowerSource. A failure here is logged at debug
+   * and nothing else: it never counts towards `unreachable` and never touches the
+   * light's own attributes, because the light itself just answered. The first seed
+   * reuses the reading the probe took moments earlier instead of asking again.
+   */
+  async #readBattery(seed: boolean): Promise<void> {
+    if (!this.hasBattery) return;
+    const probed = this.#probedBattery;
+    this.#probedBattery = undefined;
+    if (seed && probed) {
+      await this.applyBattery(probed, true);
+      return;
+    }
+    let info: BatteryInfo;
+    try {
+      info = await this.client.getBatteryInfo();
+    } catch (error) {
+      this.log.debug(
+        `${this.deviceName}: battery read failed, keeping the last values: ${(error as Error).message}`,
+      );
+      return;
+    }
+    await this.applyBattery(info, seed);
+  }
+
+  /**
+   * Push one `battery-info` reading into the PowerSource attributes. Seeding writes
+   * every value; polling goes through `batteryUpdate`'s hysteresis, because the
+   * firmware's percentage and voltage wobble between reads (mapping.ts).
+   */
+  protected async applyBattery(info: BatteryInfo, seed = false): Promise<void> {
+    const push = this.attributeWriter(seed);
+    const update = seed
+      ? batteryUpdate({ batPercentRemaining: null, batChargeLevel: -1, batVoltage: null }, info)
+      : batteryUpdate(
+          {
+            batPercentRemaining: this.endpoint.getAttribute(
+              PowerSource.id,
+              "batPercentRemaining",
+            ) as number | null,
+            batChargeLevel: this.endpoint.getAttribute(PowerSource.id, "batChargeLevel") as number,
+            batVoltage: this.endpoint.getAttribute(PowerSource.id, "batVoltage") as number | null,
+          },
+          info,
+        );
+    for (const [attribute, value] of Object.entries(update)) {
+      await push(PowerSource.id, attribute, value as number, this.log);
+    }
   }
 
   /**
@@ -173,10 +299,15 @@ export abstract class ElgatoDevice {
     if (this.#reachable === reachable) return;
     this.#reachable = reachable;
     this.#failures = reachable ? 0 : this.#failures;
+    // A Key Light Mini set to save energy turns its Wi-Fi off on low battery
+    // (docs/elgato-protocol.md §3, `lights/settings.battery.energySaving`).
+    const hint = this.hasBattery
+      ? " (on battery it may have switched its Wi-Fi off to save energy)"
+      : "";
     this.log.notice(
       reachable
         ? `${this.deviceName} is answering again at ${this.client.host}`
-        : `${this.deviceName} stopped answering at ${this.client.host}, reporting it as unreachable`,
+        : `${this.deviceName} stopped answering at ${this.client.host}, reporting it as unreachable${hint}`,
     );
     await this.endpoint.updateAttribute(
       BridgedDeviceBasicInformation,

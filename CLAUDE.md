@@ -8,7 +8,8 @@ you to set the bridge up for them.
 Commands that matter:
 
 - `npm test` runs vitest against mock devices; `npm run mock` starts those mocks
-  by hand on ports 9123 and 9124, and `--mk2` adds a light the plugin skips.
+  by hand on ports 9123 and 9124, `--mini` adds a Key Light Mini with a battery,
+  and `--mk2` adds a light the plugin skips.
 - `ELGATO_LIVE=1 ELGATO_KEY_LIGHT_HOST=192.168.1.50 ELGATO_LIGHT_STRIP_HOST=192.168.1.51 npm run test:live`
   drives real lights and puts their state back afterwards.
 - `npm run link && npm run add && npm run dev` runs the plugin inside a real

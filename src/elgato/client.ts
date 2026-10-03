@@ -5,6 +5,7 @@
 
 import type {
   AccessoryInfo,
+  BatteryInfo,
   ElgatoErrorBody,
   LightPatch,
   LightsResponse,
@@ -99,6 +100,8 @@ export class ElgatoClient {
   #host: string;
   readonly port: number;
   readonly timeoutMs: number;
+  /** Cached answer of `probeBattery`; `undefined` until the device has answered once. */
+  #hasBattery: boolean | undefined;
 
   constructor(host: string, options: ElgatoClientOptions = {}) {
     this.#host = host;
@@ -183,6 +186,40 @@ export class ElgatoClient {
 
   getLightsSettings(): Promise<LightsSettings> {
     return this.#request<LightsSettings>("GET", "/elgato/lights/settings");
+  }
+
+  /** Key Light Mini only; every other model answers 404 (docs/elgato-protocol.md §3). */
+  getBatteryInfo(): Promise<BatteryInfo> {
+    return this.#request<BatteryInfo>("GET", "/elgato/battery-info");
+  }
+
+  /** The cached probe answer, or `undefined` while no probe has been answered. */
+  get hasBattery(): boolean | undefined {
+    return this.#hasBattery;
+  }
+
+  /**
+   * Does this light have a battery? Asks `/elgato/battery-info` and caches the answer,
+   * rather than switching on `hardwareBoardType` 202 or on `features` (the Mini lists
+   * only `["lights"]`, docs/elgato-protocol.md §3), so a future battery model works too.
+   *
+   * Returns the first reading when there is a battery and `undefined` when the device
+   * said no (a 404 or any other refusal). A "no" is final and never asked again. A
+   * request that got no answer at all throws and is not cached.
+   */
+  async probeBattery(): Promise<BatteryInfo | undefined> {
+    if (this.#hasBattery === false) return undefined;
+    try {
+      const info = await this.getBatteryInfo();
+      this.#hasBattery = true;
+      return info;
+    } catch (error) {
+      if (error instanceof ElgatoHttpError && error.refused) {
+        this.#hasBattery = false;
+        return undefined;
+      }
+      throw error;
+    }
   }
 
   /**

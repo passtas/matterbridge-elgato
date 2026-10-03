@@ -13,6 +13,7 @@ import {
   ColorControl,
   LevelControl,
   OnOff,
+  PowerSource,
 } from "matterbridge/matter/clusters";
 import {
   addMatterbridge,
@@ -29,6 +30,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { MK2_TXT, MockKeyLightAirMk2 } from "../scripts/mock-elgato-mk2.ts";
 import { MockElgatoDevice, RAINBOW_SCENE } from "../scripts/mock-elgato.ts";
+import { batteryPollEvery } from "../src/config.ts";
 import { ElgatoClient, ElgatoHttpError } from "../src/elgato/client.ts";
 import { isMdnsName } from "../src/elgato/discovery.ts";
 import type { DiscoveredService } from "../src/elgato/types.ts";
@@ -38,11 +40,13 @@ import { announcement, aRecordPacket, fakeDiscovery } from "./helpers/fakeBonjou
 
 const KEY_LIGHT_SERIAL = "CW33J1A00001";
 const STRIP_SERIAL = "EW52J1A00002";
+const MINI_SERIAL = "CW43K1A00003";
 /** Not 5540: the real matterbridge default must stay free while tests run. */
 const MATTER_TEST_PORT = 5561;
 
 const keyLightMock = new MockElgatoDevice({ model: "key-light-air" });
 const stripMock = new MockElgatoDevice({ model: "light-strip" });
+const miniMock = new MockElgatoDevice({ model: "key-light-mini" });
 const mk2Mock = new MockKeyLightAirMk2();
 
 /** An MK.2 as mDNS presents it: same service, same port, plus the `tls` TXT key. */
@@ -56,6 +60,10 @@ const mk2Service: DiscoveredService = {
 let platform: ElgatoPlatform;
 let keyLight: MatterbridgeEndpoint;
 let strip: MatterbridgeEndpoint;
+let mini: MatterbridgeEndpoint;
+
+const batteryReads = (mock: MockElgatoDevice): number =>
+  mock.requests.filter((request) => request.path === "/elgato/battery-info").length;
 
 const makeConfig = (overrides: Partial<PlatformConfig> = {}): PlatformConfig =>
   ({
@@ -70,6 +78,7 @@ const makeConfig = (overrides: Partial<PlatformConfig> = {}): PlatformConfig =>
     devices: [
       { host: `127.0.0.1:${keyLightMock.port}` },
       { host: `127.0.0.1:${stripMock.port}`, name: "Office Strip" },
+      { host: `127.0.0.1:${miniMock.port}` },
     ],
     whiteList: [],
     blackList: [],
@@ -98,6 +107,7 @@ beforeAll(async () => {
   await startServerNode();
   await keyLightMock.start();
   await stripMock.start();
+  await miniMock.start();
   await mk2Mock.start();
 });
 
@@ -106,6 +116,7 @@ afterAll(async () => {
   await stopServerNode();
   await keyLightMock.stop();
   await stripMock.stop();
+  await miniMock.stop();
   await mk2Mock.stop();
 });
 
@@ -122,13 +133,13 @@ describe("startup", () => {
     ).toThrow(/requires Matterbridge version >= "3.10.0"/);
   });
 
-  it("registers both manual devices as bridged endpoints", async () => {
+  it("registers every manual device as a bridged endpoint", async () => {
     addMatterbridge(platform);
     await platform.onStart("vitest");
 
-    expect(platform.devices.size).toBe(2);
-    expect(platform.registry.size).toBe(2);
-    expect(platform.getDevices()).toHaveLength(2);
+    expect(platform.devices.size).toBe(3);
+    expect(platform.registry.size).toBe(3);
+    expect(platform.getDevices()).toHaveLength(3);
 
     const keyLightEndpoint = platform.getDeviceBySerialNumber(KEY_LIGHT_SERIAL);
     const stripEndpoint = platform.getDeviceBySerialNumber(STRIP_SERIAL);
@@ -136,6 +147,37 @@ describe("startup", () => {
     expect(stripEndpoint).toBeDefined();
     keyLight = keyLightEndpoint as MatterbridgeEndpoint;
     strip = stripEndpoint as MatterbridgeEndpoint;
+    mini = platform.getDeviceBySerialNumber(MINI_SERIAL) as MatterbridgeEndpoint;
+    expect(mini).toBeDefined();
+  });
+
+  it("gives the Key Light Mini a battery PowerSource, and the others a wired one", () => {
+    expect([...mini.deviceTypes.keys()]).toEqual(expect.arrayContaining([0x010c, 0x0013, 0x0011]));
+    expect(mini.getAttribute(PowerSource.id, "featureMap")).toMatchObject({
+      wired: false,
+      battery: true,
+      rechargeable: true,
+      replaceable: false,
+    });
+    expect(mini.getAttribute(PowerSource.id, "batReplaceability")).toBe(
+      PowerSource.BatReplaceability.NotReplaceable,
+    );
+    expect(mini.getAttribute(PowerSource.id, "batReplacementNeeded")).toBe(false);
+    expect(mini.getAttribute(PowerSource.id, "status")).toBe(PowerSource.PowerSourceStatus.Active);
+    // Built from the probe's reading, before onConfigure: 78.57 % must not land as 157.14.
+    expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(157);
+    expect(mini.getAttribute(PowerSource.id, "batVoltage")).toBe(3860);
+    // The helper would say IsNotCharging until the seed; the probe says charging.
+    expect(mini.getAttribute(PowerSource.id, "batChargeState")).toBe(
+      PowerSource.BatChargeState.IsCharging,
+    );
+
+    for (const wired of [keyLight, strip]) {
+      expect(wired.getAttribute(PowerSource.id, "featureMap")).toMatchObject({
+        wired: true,
+        battery: false,
+      });
+    }
   });
 
   it("names the Key Light from accessory-info and honors the config override", () => {
@@ -172,7 +214,11 @@ describe("startup", () => {
   });
 
   it("seeds the live device state in onConfigure", async () => {
+    const probes = batteryReads(miniMock);
+    expect(probes).toBe(1);
     await platform.onConfigure();
+    // The seed reuses the probe's reading rather than asking the light again.
+    expect(batteryReads(miniMock)).toBe(probes);
     expect(keyLight.getAttribute(OnOff.id, "onOff")).toBe(true);
     expect(keyLight.getAttribute(LevelControl.id, "currentLevel")).toBe(105); // brightness 43
     expect(keyLight.getAttribute(ColorControl.id, "colorTemperatureMireds")).toBe(221);
@@ -180,6 +226,11 @@ describe("startup", () => {
     expect(strip.getAttribute(ColorControl.id, "currentSaturation")).toBe(254);
     // The poll loop and the retry queue, on separate timers.
     expect(platform.intervals).toHaveLength(2);
+    expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(157);
+    expect(mini.getAttribute(PowerSource.id, "batChargeState")).toBe(
+      PowerSource.BatChargeState.IsCharging,
+    );
+    expect(mini.getAttribute(PowerSource.id, "batChargeLevel")).toBe(PowerSource.BatChargeLevel.Ok);
   });
 });
 
@@ -329,7 +380,194 @@ describe("poll loop", () => {
     await platform.executeIntervals(1);
     expect(keyLight.getAttribute(BridgedDeviceBasicInformation.id, "reachable")).toBe(true);
     // The endpoint is never unregistered.
-    expect(platform.getDevices()).toHaveLength(2);
+    expect(platform.getDevices()).toHaveLength(3);
+  });
+});
+
+describe("Key Light Mini battery", () => {
+  /** Poll ticks per battery read at the test's 1000 ms poll interval. */
+  const every = batteryPollEvery(makeConfig());
+
+  it("reads the battery about every 30 s, on the existing poll tick", async () => {
+    expect(every).toBe(30);
+    expect(platform.intervals).toHaveLength(2);
+    const before = batteryReads(miniMock);
+    // Any 2N consecutive ticks hold exactly two multiples of N.
+    await platform.executeIntervals(every * 2);
+    expect(batteryReads(miniMock) - before).toBe(2);
+  });
+
+  it("asks a light without a battery once, at registration, and never again", async () => {
+    await platform.executeIntervals(every);
+    expect(batteryReads(keyLightMock)).toBe(1);
+    expect(batteryReads(stripMock)).toBe(1);
+  });
+
+  it("reflects unplugging and a draining battery within one battery read", async () => {
+    miniMock.battery = {
+      powerSource: 2,
+      level: 15.4,
+      status: 0,
+      currentBatteryVoltage: 3600,
+      inputChargeVoltage: 0,
+      inputChargeCurrent: 0,
+    };
+    await platform.executeIntervals(every);
+    expect(mini.getAttribute(PowerSource.id, "batChargeState")).toBe(
+      PowerSource.BatChargeState.IsNotCharging,
+    );
+    expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(31);
+    expect(mini.getAttribute(PowerSource.id, "batChargeLevel")).toBe(
+      PowerSource.BatChargeLevel.Warning,
+    );
+    expect(mini.getAttribute(PowerSource.id, "batVoltage")).toBe(3600);
+
+    miniMock.battery = { ...miniMock.battery, level: 7.2 };
+    await platform.executeIntervals(every);
+    expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(14);
+    expect(mini.getAttribute(PowerSource.id, "batChargeLevel")).toBe(
+      PowerSource.BatChargeLevel.Critical,
+    );
+
+    miniMock.battery = { ...miniMock.battery, level: 100, status: 3, powerSource: 1 };
+    await platform.executeIntervals(every);
+    expect(mini.getAttribute(PowerSource.id, "batChargeState")).toBe(
+      PowerSource.BatChargeState.IsAtFullCharge,
+    );
+    expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(200);
+  });
+
+  it("does not re-report a percentage or voltage that only wobbles", async () => {
+    const steady = {
+      powerSource: 1,
+      level: 96.15,
+      status: 2,
+      currentBatteryVoltage: 3997,
+      inputChargeVoltage: 4208,
+      inputChargeCurrent: 3008,
+    };
+    miniMock.battery = steady;
+    await platform.executeIntervals(every);
+    expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(192);
+    expect(mini.getAttribute(PowerSource.id, "batVoltage")).toBe(3997);
+
+    // Half a percent and a few millivolts: below both thresholds.
+    miniMock.battery = { ...steady, level: 95.7, currentBatteryVoltage: 3981 };
+    await platform.executeIntervals(every);
+    expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(192);
+    expect(mini.getAttribute(PowerSource.id, "batVoltage")).toBe(3997);
+
+    // A full percent and 20 mV: both follow. The charge state never waits.
+    miniMock.battery = { ...steady, level: 95.1, currentBatteryVoltage: 3977, status: 0 };
+    await platform.executeIntervals(every);
+    expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(190);
+    expect(mini.getAttribute(PowerSource.id, "batVoltage")).toBe(3977);
+    expect(mini.getAttribute(PowerSource.id, "batChargeState")).toBe(
+      PowerSource.BatChargeState.IsNotCharging,
+    );
+  });
+
+  it("reports a charge status it does not know as Unknown", async () => {
+    miniMock.battery = { ...(miniMock.battery as NonNullable<typeof miniMock.battery>), status: 7 };
+    await platform.executeIntervals(every);
+    expect(mini.getAttribute(PowerSource.id, "batChargeState")).toBe(
+      PowerSource.BatChargeState.Unknown,
+    );
+    expect(mini.getAttribute(BridgedDeviceBasicInformation.id, "reachable")).toBe(true);
+  });
+
+  it("never lets a failing battery read mark the light unreachable or touch its state", async () => {
+    miniMock.light = { on: 1, brightness: 50, temperature: 250 };
+    await platform.executeIntervals(1);
+    const level = mini.getAttribute(LevelControl.id, "currentLevel");
+    const percent = mini.getAttribute(PowerSource.id, "batPercentRemaining");
+
+    miniMock.batteryFault = true;
+    const before = batteryReads(miniMock);
+    await platform.executeIntervals(every * 3);
+    miniMock.batteryFault = false;
+
+    expect(batteryReads(miniMock) - before).toBe(3);
+    expect(mini.getAttribute(BridgedDeviceBasicInformation.id, "reachable")).toBe(true);
+    expect(mini.getAttribute(OnOff.id, "onOff")).toBe(true);
+    expect(mini.getAttribute(LevelControl.id, "currentLevel")).toBe(level);
+    expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(percent);
+  });
+
+  it("skips the battery read while the light itself is not answering", async () => {
+    const before = batteryReads(miniMock);
+    miniMock.fault = "offline";
+    await platform.executeIntervals(every);
+    miniMock.fault = "none";
+    // The offline mock still logs the request it dropped, so only lights paths appear.
+    expect(batteryReads(miniMock)).toBe(before);
+    await platform.executeIntervals(1);
+    expect(mini.getAttribute(BridgedDeviceBasicInformation.id, "reachable")).toBe(true);
+  });
+});
+
+describe("a battery probe that gets no answer", () => {
+  const FLAKY_SERIAL = "CW43K1A00004";
+  const flaky = new MockElgatoDevice({ model: "key-light-mini" });
+  flaky.info.serialNumber = FLAKY_SERIAL;
+  let other: ElgatoPlatform;
+  let host: string;
+
+  beforeAll(async () => {
+    flaky.batteryFault = true;
+    await flaky.start();
+    host = `127.0.0.1:${flaky.port}`;
+    other = new ElgatoPlatform(
+      getMatterbridge(),
+      log as AnsiLogger,
+      makeConfig({ devices: [{ host }] }),
+    );
+    addMatterbridge(other);
+  });
+
+  afterAll(async () => {
+    await other.onShutdown("flaky battery");
+    await flaky.stop();
+  });
+
+  it("keeps the light out and queues it for a retry, rather than building it wired", async () => {
+    const error = vi.spyOn(other.log, "error");
+    try {
+      await other.onStart("flaky battery");
+      expect(other.devices.has(FLAKY_SERIAL)).toBe(false);
+      expect(other.registry.has(FLAKY_SERIAL)).toBe(false);
+      expect(other.pendingRetries.get(host)).toMatchObject({ host, retries: 0 });
+      expect(error).toHaveBeenCalledWith(expect.stringMatching(/did not answer its battery probe/));
+      // A dropped battery probe must not be mistaken for an MK.2's closed socket.
+      expect(other.unsupportedCount).toBe(0);
+    } finally {
+      error.mockRestore();
+    }
+  });
+
+  it("is retried, then registered with its battery and seeded from the probe", async () => {
+    await other.onConfigure();
+    flaky.batteryFault = false;
+    const before = batteryReads(flaky);
+    await other.retryPending({ force: true });
+
+    const device = other.devices.get(FLAKY_SERIAL);
+    expect(device?.hasBattery).toBe(true);
+    expect(other.pendingRetries.size).toBe(0);
+    const endpoint = device?.endpoint as MatterbridgeEndpoint;
+    expect(endpoint.getAttribute(PowerSource.id, "featureMap")).toMatchObject({
+      wired: false,
+      battery: true,
+      rechargeable: true,
+    });
+    // Seeded on the late-registration path, after onConfigure had already run.
+    expect(endpoint.getAttribute(OnOff.id, "onOff")).toBe(true);
+    expect(endpoint.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(157);
+    expect(endpoint.getAttribute(PowerSource.id, "batChargeState")).toBe(
+      PowerSource.BatChargeState.IsCharging,
+    );
+    // One battery request: the probe. The seed reused its reading.
+    expect(batteryReads(flaky) - before).toBe(1);
   });
 });
 
@@ -446,7 +684,7 @@ describe("discovery hygiene", () => {
     const other = new ElgatoPlatform(
       getMatterbridge(),
       log as AnsiLogger,
-      makeConfig({ blackList: [KEY_LIGHT_SERIAL, STRIP_SERIAL] }),
+      makeConfig({ blackList: [KEY_LIGHT_SERIAL, STRIP_SERIAL, MINI_SERIAL] }),
     );
     addMatterbridge(other);
     await other.onStart("skip");
@@ -576,7 +814,7 @@ describe("white and black lists", () => {
     const other = new ElgatoPlatform(
       getMatterbridge(),
       log as AnsiLogger,
-      makeConfig({ blackList: [KEY_LIGHT_SERIAL, STRIP_SERIAL] }),
+      makeConfig({ blackList: [KEY_LIGHT_SERIAL, STRIP_SERIAL, MINI_SERIAL] }),
     );
     addMatterbridge(other);
     await other.onStart("blacklist");
@@ -1399,11 +1637,11 @@ describe("probes that finish late", () => {
 
 describe("shutdown", () => {
   it("clears the poll interval and leaves the bridged endpoints in place", async () => {
-    expect(platform.getDevices()).toHaveLength(2);
+    expect(platform.getDevices()).toHaveLength(3);
     await platform.onShutdown("vitest");
     expect(platform.intervals).toHaveLength(0);
     // `unregisterOnShutdown` is false, so the endpoints stay on the aggregator; the
     // platform's own registry is cleared by MatterbridgePlatform.destroy().
-    expect(platform.devices.size).toBe(2);
+    expect(platform.devices.size).toBe(3);
   });
 });

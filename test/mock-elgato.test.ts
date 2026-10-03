@@ -37,6 +37,31 @@ describe("mock honors the captured fixtures", () => {
   });
 });
 
+describe("Key Light Mini", () => {
+  it("serves the Key Light Mini fixtures, battery-info included", async () => {
+    const { client } = await boot("key-light-mini");
+    expect(await client.getAccessoryInfo()).toEqual(fixture("key-light-mini-accessory-info"));
+    expect(await client.getLightsSettings()).toEqual(fixture("key-light-mini-lights-settings"));
+    expect(await client.getBatteryInfo()).toEqual(fixture("key-light-mini-battery-info"));
+  });
+
+  it("takes writes like the Key Light Air", async () => {
+    const { client } = await boot("key-light-mini");
+    expect((await client.putLights({ brightness: 70, temperature: 250 })).lights[0]).toEqual({
+      on: 1,
+      brightness: 70,
+      temperature: 250,
+    });
+  });
+
+  it("drops only battery-info under `batteryFault`", async () => {
+    const { mock, client } = await boot("key-light-mini");
+    mock.batteryFault = true;
+    await expect(client.getBatteryInfo()).rejects.toThrow();
+    expect((await client.getLights()).lights).toHaveLength(1);
+  });
+});
+
 describe("Key Light Air PUT semantics", () => {
   it("preserves unnamed fields on a partial body", async () => {
     const { client } = await boot("key-light-air");

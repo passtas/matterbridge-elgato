@@ -27,6 +27,19 @@ on its own once the light answers again. Check that the light is powered and on
 Wi-Fi. A Key Light Mini with energy saving configured to turn its Wi-Fi off
 disappears from the network by design.
 
+**A Key Light Mini shows no battery after upgrading.** Lights added by 0.1.x
+carried a wired PowerSource cluster; from this release a Mini carries the
+battery variant under the same endpoint, so it keeps its room, name and
+automations, and it comes back under the same endpoint number. The
+bridge reports the new features to each controller when it reconnects, but
+whether a controller redraws the device without help is up to the controller.
+If it still shows no battery a few minutes later, restart the controller's hub
+(the Nest or HomePod). Removing and re-pairing the whole bridge also works, but
+costs every room and automation, so treat it as the last resort. A light
+that answers but not its battery probe (`… did not answer its battery probe`
+in the log) is not added yet; it is retried like a light that is off, and added
+once it answers.
+
 **Collecting logs.** `npx matterbridge-elgato@latest logs` (add `-f` to follow),
 or `docker logs matterbridge-elgato` if you started the container yourself. Turn
 on `debug` in the plugin config first if the plain log does not show the problem.

@@ -1,6 +1,11 @@
+import { PowerSource } from "matterbridge/matter/clusters";
 import { describe, expect, it } from "vitest";
 
+import type { BatteryInfo } from "../src/elgato/types.ts";
 import {
+  BAT_CHARGE_LEVEL,
+  BAT_CHARGE_STATE,
+  batteryUpdate,
   DEVICE_TYPE_NAMES,
   clamp,
   detectCapability,
@@ -10,14 +15,18 @@ import {
   toElgatoBrightness,
   toElgatoHue,
   toElgatoSaturation,
+  toBatChargeLevel,
+  toBatChargeState,
   toElgatoTemperature,
+  toMatterBatPercent,
+  toMatterBatVoltage,
   toMatterHue,
   toMatterLevel,
   toMatterMireds,
   toMatterSaturation,
 } from "../src/mapping.ts";
 
-import { light } from "./helpers/fixtures.ts";
+import { fixture, light } from "./helpers/fixtures.ts";
 
 const ctLight = light("key-light-air-lights");
 const hsvLight = light("light-strip-lights-hsv");
@@ -186,5 +195,171 @@ describe("device type names", () => {
   it("falls back for unknown and missing codes", () => {
     expect(deviceTypeName(999)).toBe("Elgato light");
     expect(deviceTypeName(undefined)).toBe("Elgato light");
+  });
+});
+
+describe("battery (PowerSource)", () => {
+  const battery = fixture<BatteryInfo>("key-light-mini-battery-info");
+
+  it("uses the installed matter.js enum values", () => {
+    expect(BAT_CHARGE_LEVEL).toEqual({
+      Ok: PowerSource.BatChargeLevel.Ok,
+      Warning: PowerSource.BatChargeLevel.Warning,
+      Critical: PowerSource.BatChargeLevel.Critical,
+    });
+    expect(BAT_CHARGE_STATE).toEqual({
+      Unknown: PowerSource.BatChargeState.Unknown,
+      IsCharging: PowerSource.BatChargeState.IsCharging,
+      IsAtFullCharge: PowerSource.BatChargeState.IsAtFullCharge,
+      IsNotCharging: PowerSource.BatChargeState.IsNotCharging,
+    });
+  });
+
+  it("maps the published Key Light Mini sample", () => {
+    expect(toMatterBatPercent(battery.level)).toBe(157); // 78.57 %
+    expect(toBatChargeLevel(battery.level)).toBe(PowerSource.BatChargeLevel.Ok);
+    expect(toBatChargeState(battery.status)).toBe(PowerSource.BatChargeState.IsCharging);
+    expect(toMatterBatVoltage(battery.currentBatteryVoltage)).toBe(3860);
+  });
+
+  it("reports batPercentRemaining in whole half-percents, never a fraction", () => {
+    expect(toMatterBatPercent(78.57)).toBe(157);
+    expect(toMatterBatPercent(96.05)).toBe(192); // the live 2026-10-03 reading
+    expect(toMatterBatPercent(0)).toBe(0);
+    expect(toMatterBatPercent(50)).toBe(100);
+    expect(toMatterBatPercent(100)).toBe(200);
+    for (let hundredths = 0; hundredths <= 10_000; hundredths += 1) {
+      const value = toMatterBatPercent(hundredths / 100);
+      expect(Number.isInteger(value)).toBe(true);
+      // Within half a percent of the light's own figure.
+      expect(Math.abs((value as number) / 2 - hundredths / 100)).toBeLessThanOrEqual(0.25);
+    }
+  });
+
+  it("clamps batPercentRemaining to 0–200 and reports garbage as unknown", () => {
+    expect(toMatterBatPercent(-3)).toBe(0);
+    expect(toMatterBatPercent(100.4)).toBe(200);
+    expect(toMatterBatPercent(150)).toBe(200);
+    expect(toMatterBatPercent(Number.NaN)).toBeNull();
+    expect(toMatterBatPercent(undefined)).toBeNull();
+    expect(toMatterBatPercent("50")).toBeNull();
+  });
+
+  it("reports Warning below 20 % and Critical below 10 %", () => {
+    expect(toBatChargeLevel(100)).toBe(PowerSource.BatChargeLevel.Ok);
+    expect(toBatChargeLevel(20)).toBe(PowerSource.BatChargeLevel.Ok);
+    expect(toBatChargeLevel(19.99)).toBe(PowerSource.BatChargeLevel.Warning);
+    expect(toBatChargeLevel(15)).toBe(PowerSource.BatChargeLevel.Warning);
+    expect(toBatChargeLevel(10)).toBe(PowerSource.BatChargeLevel.Warning);
+    expect(toBatChargeLevel(9.99)).toBe(PowerSource.BatChargeLevel.Critical);
+    expect(toBatChargeLevel(0)).toBe(PowerSource.BatChargeLevel.Critical);
+    // No reading is no reason to raise an alarm.
+    expect(toBatChargeLevel(undefined)).toBe(PowerSource.BatChargeLevel.Ok);
+  });
+
+  it("maps every documented charge status, and anything else to Unknown", () => {
+    expect(toBatChargeState(0)).toBe(PowerSource.BatChargeState.IsNotCharging);
+    expect(toBatChargeState(1)).toBe(PowerSource.BatChargeState.IsCharging);
+    expect(toBatChargeState(2)).toBe(PowerSource.BatChargeState.IsCharging);
+    expect(toBatChargeState(3)).toBe(PowerSource.BatChargeState.IsAtFullCharge);
+    for (const odd of [4, -1, 2.5, "2", null, undefined]) {
+      expect(toBatChargeState(odd)).toBe(PowerSource.BatChargeState.Unknown);
+    }
+  });
+
+  it("passes the battery voltage through in mV", () => {
+    expect(toMatterBatVoltage(4007)).toBe(4007);
+    expect(toMatterBatVoltage(4007.6)).toBe(4008);
+    expect(toMatterBatVoltage(-1)).toBeNull();
+    expect(toMatterBatVoltage(undefined)).toBeNull();
+  });
+});
+
+describe("battery hysteresis", () => {
+  const { Ok, Warning, Critical } = BAT_CHARGE_LEVEL;
+  const reading = (level: number, millivolts = 3997, status = 2) => ({
+    level,
+    status,
+    currentBatteryVoltage: millivolts,
+  });
+
+  it("reports everything when nothing has been reported yet", () => {
+    expect(
+      batteryUpdate(
+        { batPercentRemaining: null, batChargeLevel: -1, batVoltage: null },
+        reading(96.15),
+      ),
+    ).toEqual({
+      batPercentRemaining: 192,
+      batChargeLevel: Ok,
+      batChargeState: BAT_CHARGE_STATE.IsCharging,
+      batVoltage: 3997,
+    });
+  });
+
+  it("holds the percentage under a 1 % move and follows one of 1 % or more", () => {
+    const reported = { batPercentRemaining: 192, batChargeLevel: Ok, batVoltage: 3997 };
+    expect(batteryUpdate(reported, reading(95.7)).batPercentRemaining).toBeUndefined(); // 191
+    expect(batteryUpdate(reported, reading(96.4)).batPercentRemaining).toBeUndefined(); // 193
+    expect(batteryUpdate(reported, reading(96.0)).batPercentRemaining).toBeUndefined(); // 192
+    expect(batteryUpdate(reported, reading(95.1)).batPercentRemaining).toBe(190);
+    expect(batteryUpdate(reported, reading(94.65)).batPercentRemaining).toBe(189);
+  });
+
+  it("follows any percentage change that crosses a charge-level threshold", () => {
+    // 20.5 % → 20.1 %: one half-percent step that stays Ok, so it is held.
+    expect(
+      batteryUpdate(
+        { batPercentRemaining: 41, batChargeLevel: Ok, batVoltage: 3700 },
+        reading(20.1),
+      ).batPercentRemaining,
+    ).toBeUndefined();
+    // 10.5 % → 9.8 %: one half-percent step, but Warning → Critical.
+    const atCritical = batteryUpdate(
+      { batPercentRemaining: 21, batChargeLevel: Warning, batVoltage: 3600 },
+      reading(9.8),
+    );
+    expect(atCritical).toMatchObject({ batPercentRemaining: 20, batChargeLevel: Critical });
+    // 20.5 % → 19.9 %: one half-percent step, but Ok → Warning.
+    const crossing = batteryUpdate(
+      { batPercentRemaining: 41, batChargeLevel: Ok, batVoltage: 3700 },
+      reading(19.9),
+    );
+    expect(crossing).toMatchObject({ batPercentRemaining: 40, batChargeLevel: Warning });
+  });
+
+  it("always reports reaching 0 % or 100 %", () => {
+    expect(
+      batteryUpdate(
+        { batPercentRemaining: 199, batChargeLevel: Ok, batVoltage: 4100 },
+        reading(100),
+      ).batPercentRemaining,
+    ).toBe(200);
+    expect(
+      batteryUpdate(
+        { batPercentRemaining: 1, batChargeLevel: Critical, batVoltage: 3300 },
+        reading(0.1),
+      ).batPercentRemaining,
+    ).toBe(0);
+  });
+
+  it("holds the voltage under 20 mV and follows a move of 20 mV or more", () => {
+    const reported = { batPercentRemaining: 192, batChargeLevel: Ok, batVoltage: 3997 };
+    expect(batteryUpdate(reported, reading(96.15, 3996)).batVoltage).toBeUndefined();
+    expect(batteryUpdate(reported, reading(96.15, 4016)).batVoltage).toBeUndefined();
+    expect(batteryUpdate(reported, reading(96.15, 4017)).batVoltage).toBe(4017);
+    expect(batteryUpdate(reported, reading(96.15, 3977)).batVoltage).toBe(3977);
+  });
+
+  it("always passes charge state and level through, and keeps the last values on garbage", () => {
+    const reported = { batPercentRemaining: 192, batChargeLevel: Ok, batVoltage: 3997 };
+    expect(batteryUpdate(reported, reading(96.15, 3997, 0))).toEqual({
+      batChargeLevel: Ok,
+      batChargeState: BAT_CHARGE_STATE.IsNotCharging,
+    });
+    expect(batteryUpdate(reported, { status: 3 })).toEqual({
+      batChargeLevel: Ok,
+      batChargeState: BAT_CHARGE_STATE.IsAtFullCharge,
+    });
   });
 });

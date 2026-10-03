@@ -120,3 +120,129 @@ export const DEVICE_TYPE_NAMES: Readonly<Record<number, string>> = {
 
 export const deviceTypeName = (dt: number | undefined): string =>
   (dt !== undefined && DEVICE_TYPE_NAMES[dt]) || "Elgato light";
+
+// ---- battery (PowerSource cluster), Key Light Mini --------------------------
+//
+// The numbers below are the Matter PowerSource enum values. They are spelled out here
+// rather than imported from `matterbridge/matter/clusters` so this module keeps no
+// runtime dependency; test/mapping.test.ts checks each one against the installed
+// `PowerSource` enums. Note the order: IsAtFullCharge is 2 and IsNotCharging is 3.
+
+/** Matter `PowerSource.BatChargeLevel`. */
+export const BAT_CHARGE_LEVEL = { Ok: 0, Warning: 1, Critical: 2 } as const;
+/** Matter `PowerSource.BatChargeState`. */
+export const BAT_CHARGE_STATE = {
+  Unknown: 0,
+  IsCharging: 1,
+  IsAtFullCharge: 2,
+  IsNotCharging: 3,
+} as const;
+
+/** Below this charge, in percent, `batChargeLevel` reports Warning. Elgato's own energy-saving default is 15 %. */
+export const BATTERY_WARNING_PERCENT = 20;
+/** Below this charge, in percent, `batChargeLevel` reports Critical. */
+export const BATTERY_CRITICAL_PERCENT = 10;
+/** `batPercentRemaining` is in half-percent units, so 100 % is 200. */
+export const MAX_BAT_PERCENT_REMAINING = 200;
+
+const isNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value);
+
+/**
+ * Elgato `level` (percent, fractional: `78.57`) to Matter `batPercentRemaining`, which
+ * counts half-percents (0 to 200) and must be an integer. `null` (Matter's "unknown")
+ * when the firmware sent no usable number.
+ */
+export const toMatterBatPercent = (level: unknown): number | null =>
+  isNumber(level) ? clamp(Math.round(level * 2), 0, MAX_BAT_PERCENT_REMAINING) : null;
+
+/** Elgato `level` to Matter `batChargeLevel`: Warning below 20 %, Critical below 10 %. */
+export const toBatChargeLevel = (level: unknown): number => {
+  if (!isNumber(level)) return BAT_CHARGE_LEVEL.Ok;
+  if (level < BATTERY_CRITICAL_PERCENT) return BAT_CHARGE_LEVEL.Critical;
+  if (level < BATTERY_WARNING_PERCENT) return BAT_CHARGE_LEVEL.Warning;
+  return BAT_CHARGE_LEVEL.Ok;
+};
+
+/**
+ * Elgato `status` to Matter `batChargeState`. `1` (pre-charge) and `2` (fast charge)
+ * are both charging; python-elgato never saw `1`, so it is mapped but unconfirmed.
+ * Anything else is Unknown, never an error: the field set has changed across builds.
+ */
+export const toBatChargeState = (status: unknown): number => {
+  switch (status) {
+    case 0:
+      return BAT_CHARGE_STATE.IsNotCharging;
+    case 1:
+    case 2:
+      return BAT_CHARGE_STATE.IsCharging;
+    case 3:
+      return BAT_CHARGE_STATE.IsAtFullCharge;
+    default:
+      return BAT_CHARGE_STATE.Unknown;
+  }
+};
+
+/** Elgato `currentBatteryVoltage` (mV) to Matter `batVoltage` (mV, uint32), or `null` if unknown. */
+export const toMatterBatVoltage = (millivolts: unknown): number | null =>
+  isNumber(millivolts) && millivolts >= 0 ? Math.round(millivolts) : null;
+
+/** `batVoltage` is only re-reported when it moves by at least this much, mV. */
+export const BAT_VOLTAGE_HYSTERESIS_MV = 20;
+/** `batPercentRemaining` is only re-reported when it moves by at least this many half-percents (1 %). */
+export const BAT_PERCENT_HYSTERESIS = 2;
+
+/** What PowerSource currently reports, as far as the battery is concerned. */
+export interface ReportedBattery {
+  batPercentRemaining: number | null;
+  batChargeLevel: number;
+  batVoltage: number | null;
+}
+
+/** The attributes worth writing for one reading. An absent key means "leave it". */
+export interface BatteryUpdate {
+  batPercentRemaining?: number;
+  batChargeLevel: number;
+  batChargeState: number;
+  batVoltage?: number;
+}
+
+const movedBy = (previous: number | null, next: number, step: number): boolean =>
+  previous === null || Math.abs(next - previous) >= step;
+
+/**
+ * Which battery attributes one `battery-info` reading should change, with hysteresis.
+ *
+ * The firmware's readings wobble between polls (live 2026-10-03: voltage
+ * 3997 → 3996 → 3997 mV and level 96.15 → 94.65 → 96.15 % within seconds), and every
+ * changed attribute is a log line and a report to every paired controller. So:
+ * charge state and charge level always follow at once; the percentage follows a move
+ * of 1 % or more, or any change that crosses a charge-level threshold or lands on
+ * 0 % or 100 %; the voltage follows a move of 20 mV or more. A reading with no usable
+ * percentage or voltage leaves the last reported one in place.
+ */
+export const batteryUpdate = (
+  reported: ReportedBattery,
+  info: { level?: unknown; status?: unknown; currentBatteryVoltage?: unknown },
+): BatteryUpdate => {
+  const update: BatteryUpdate = {
+    batChargeLevel: toBatChargeLevel(info.level),
+    batChargeState: toBatChargeState(info.status),
+  };
+  const percent = toMatterBatPercent(info.level);
+  if (
+    percent !== null &&
+    percent !== reported.batPercentRemaining &&
+    (movedBy(reported.batPercentRemaining, percent, BAT_PERCENT_HYSTERESIS) ||
+      update.batChargeLevel !== reported.batChargeLevel ||
+      percent === 0 ||
+      percent === MAX_BAT_PERCENT_REMAINING)
+  ) {
+    update.batPercentRemaining = percent;
+  }
+  const voltage = toMatterBatVoltage(info.currentBatteryVoltage);
+  if (voltage !== null && movedBy(reported.batVoltage, voltage, BAT_VOLTAGE_HYSTERESIS_MV)) {
+    update.batVoltage = voltage;
+  }
+  return update;
+};
