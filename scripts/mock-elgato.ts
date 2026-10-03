@@ -86,8 +86,11 @@ export class MockElgatoDevice {
   scene: LightState | undefined;
   /** What `GET /elgato/battery-info` answers; `undefined` means 404, as on a model without one. */
   battery: BatteryInfo | undefined;
-  /** Drop only `GET /elgato/battery-info` requests, leaving the light itself answering. */
-  batteryFault = false;
+  /**
+   * Break only `GET /elgato/battery-info`, leaving the light itself answering: `true`
+   * drops the connection, `500` answers with that status and an error body.
+   */
+  batteryFault: boolean | 500 = false;
   /** Every request seen, for assertions. `body` is the raw PUT body, byte for byte. */
   readonly requests: MockRequest[] = [];
   /**
@@ -219,7 +222,9 @@ export class MockElgatoDevice {
           this.#json(response, 200, this.settings);
           return;
         case "/elgato/battery-info":
-          if (this.batteryFault) {
+          if (this.batteryFault === 500) {
+            this.#json(response, 500, INTERNAL_ERROR);
+          } else if (this.batteryFault) {
             request.destroy();
             response.destroy();
           } else if (this.battery) {

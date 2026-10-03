@@ -197,6 +197,8 @@ export interface ReportedBattery {
   batPercentRemaining: number | null;
   batChargeLevel: number;
   batVoltage: number | null;
+  /** The previous read's percentage, when it was held back for want of a second read. */
+  pendingPercent?: number | null;
 }
 
 /** The attributes worth writing for one reading. An absent key means "leave it". */
@@ -205,6 +207,12 @@ export interface BatteryUpdate {
   batChargeLevel: number;
   batChargeState: number;
   batVoltage?: number;
+}
+
+export interface BatteryDecision {
+  attributes: BatteryUpdate;
+  /** A percentage held back by this read, to pass in as `pendingPercent` next time. */
+  pendingPercent: number | null;
 }
 
 const movedBy = (previous: number | null, next: number, step: number): boolean =>
@@ -216,33 +224,46 @@ const movedBy = (previous: number | null, next: number, step: number): boolean =
  * The firmware's readings wobble between polls (live 2026-10-03: voltage
  * 3997 → 3996 → 3997 mV and level 96.15 → 94.65 → 96.15 % within seconds), and every
  * changed attribute is a log line and a report to every paired controller. So:
- * charge state and charge level always follow at once; the percentage follows a move
- * of 1 % or more, or any change that crosses a charge-level threshold or lands on
- * 0 % or 100 %; the voltage follows a move of 20 mV or more. A reading with no usable
- * percentage or voltage leaves the last reported one in place.
+ *
+ * - charge state and charge level always follow at once;
+ * - the voltage follows a move of 20 mV or more;
+ * - the percentage follows at once when it crosses a charge-level threshold or lands
+ *   on 0 % or 100 %, and otherwise only when it has moved 1 % or more **and** two
+ *   consecutive reads agree on it. "Agree" means within half a percent (one step) of
+ *   each other, not equal: a light charging at full current gains about one step
+ *   per read, and exact agreement would hold its percentage back for good.
+ *
+ * So a one-read dip such as 192 → 189 → 192 is never reported. A reading with no
+ * usable percentage or voltage leaves the last reported one in place.
  */
 export const batteryUpdate = (
   reported: ReportedBattery,
   info: { level?: unknown; status?: unknown; currentBatteryVoltage?: unknown },
-): BatteryUpdate => {
-  const update: BatteryUpdate = {
+): BatteryDecision => {
+  const attributes: BatteryUpdate = {
     batChargeLevel: toBatChargeLevel(info.level),
     batChargeState: toBatChargeState(info.status),
   };
+  let pendingPercent: number | null = null;
+  const previous = reported.batPercentRemaining;
   const percent = toMatterBatPercent(info.level);
-  if (
-    percent !== null &&
-    percent !== reported.batPercentRemaining &&
-    (movedBy(reported.batPercentRemaining, percent, BAT_PERCENT_HYSTERESIS) ||
-      update.batChargeLevel !== reported.batChargeLevel ||
+  if (percent !== null && percent !== previous) {
+    const immediate =
+      previous === null ||
+      attributes.batChargeLevel !== reported.batChargeLevel ||
       percent === 0 ||
-      percent === MAX_BAT_PERCENT_REMAINING)
-  ) {
-    update.batPercentRemaining = percent;
+      percent === MAX_BAT_PERCENT_REMAINING;
+    const held = reported.pendingPercent ?? null;
+    const confirmed =
+      held !== null &&
+      Math.abs(percent - held) < BAT_PERCENT_HYSTERESIS &&
+      movedBy(previous, percent, BAT_PERCENT_HYSTERESIS);
+    if (immediate || confirmed) attributes.batPercentRemaining = percent;
+    else pendingPercent = percent;
   }
   const voltage = toMatterBatVoltage(info.currentBatteryVoltage);
   if (voltage !== null && movedBy(reported.batVoltage, voltage, BAT_VOLTAGE_HYSTERESIS_MV)) {
-    update.batVoltage = voltage;
+    attributes.batVoltage = voltage;
   }
-  return update;
+  return { attributes, pendingPercent };
 };

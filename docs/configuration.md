@@ -79,15 +79,17 @@ nothing here is configurable yet:
   whatever `pollInterval` is, so unplugging or plugging the USB-C cable shows up
   within about 30 seconds rather than within one `pollInterval`.
 - **Small wobbles are not reported.** The light's own readings jitter between
-  reads, so the percentage is only re-reported after a move of 1 % or more (or
-  when it crosses 20 % or 10 %, or reaches 0 % or 100 %), and the voltage after
-  a move of 20 mV. Charging state and the low-battery level change at once.
+  reads. The percentage changes at once when it crosses 20 % or 10 % or reaches
+  0 % or 100 %; otherwise only after a move of 1 % or more that two reads in a
+  row agree on, so a one-read dip is never reported. The voltage follows a move
+  of 20 mV. Charging state and the low-battery level change at once.
 - **What is never touched.** The plugin only reads the battery. Energy saving
   and battery bypass stay in Elgato's app.
 
 Each light is asked once, when it is added, whether it has a battery; one that
-answers 404 is never asked again. One that does not answer is retried like a
-light that is off, and added once it does.
+answers 404 is never asked again. One that does not answer, or answers with a
+server error, is retried like a light that is off. After three such tries it is
+added without a battery, with a warning; restart the plugin to ask again.
 
 ## Device names and identity
 

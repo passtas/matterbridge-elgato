@@ -447,6 +447,16 @@ describe("Key Light Mini battery", () => {
       inputChargeCurrent: 3008,
     };
     miniMock.battery = steady;
+    // Down from 100 %: one read is held, the second agrees and is reported.
+    await platform.executeIntervals(every);
+    expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(200);
+    await platform.executeIntervals(every);
+    expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(192);
+
+    // The documented one-read dip, 96.15 → 94.65 → 96.15 %, is never reported.
+    miniMock.battery = { ...steady, level: 94.65 };
+    await platform.executeIntervals(every);
+    miniMock.battery = steady;
     await platform.executeIntervals(every);
     expect(mini.getAttribute(PowerSource.id, "batPercentRemaining")).toBe(192);
     expect(mini.getAttribute(PowerSource.id, "batVoltage")).toBe(3997);
@@ -568,6 +578,51 @@ describe("a battery probe that gets no answer", () => {
     );
     // One battery request: the probe. The seed reused its reading.
     expect(batteryReads(flaky) - before).toBe(1);
+  });
+});
+
+describe("a battery probe that never answers", () => {
+  it("adds the light without a battery after three tries, with one warning", async () => {
+    const SERIAL = "CW43K1A00005";
+    const stubborn = new MockElgatoDevice({ model: "key-light-mini" });
+    stubborn.info.serialNumber = SERIAL;
+    // A 5xx is a struggling light, not "no battery": it goes the retry route.
+    stubborn.batteryFault = 500;
+    await stubborn.start();
+    const host = `127.0.0.1:${stubborn.port}`;
+    const other = new ElgatoPlatform(
+      getMatterbridge(),
+      log as AnsiLogger,
+      makeConfig({ devices: [{ host }] }),
+    );
+    addMatterbridge(other);
+    const warn = vi.spyOn(other.log, "warn");
+    try {
+      await other.onStart("stubborn battery"); // try 1
+      await other.onConfigure();
+      expect(other.devices.has(SERIAL)).toBe(false);
+      await other.retryPending({ force: true }); // try 2
+      expect(other.devices.has(SERIAL)).toBe(false);
+      expect(other.pendingRetries.get(host)).toMatchObject({ retries: 1 });
+      expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/battery not read/));
+
+      await other.retryPending({ force: true }); // try 3
+      const device = other.devices.get(SERIAL);
+      expect(device?.hasBattery).toBe(false);
+      expect(device?.endpoint.getAttribute(PowerSource.id, "featureMap")).toMatchObject({
+        wired: true,
+        battery: false,
+      });
+      expect(other.pendingRetries.size).toBe(0);
+      expect(batteryReads(stubborn)).toBe(3);
+      expect(
+        warn.mock.calls.filter(([message]) => /battery not read/.test(String(message))),
+      ).toHaveLength(1);
+    } finally {
+      warn.mockRestore();
+      await other.onShutdown("stubborn battery");
+      await stubborn.stop();
+    }
   });
 });
 

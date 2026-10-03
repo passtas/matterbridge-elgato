@@ -38,7 +38,9 @@ If it still shows no battery a few minutes later, restart the controller's hub
 costs every room and automation, so treat it as the last resort. A light
 that answers but not its battery probe (`… did not answer its battery probe`
 in the log) is not added yet; it is retried like a light that is off, and added
-once it answers.
+once it answers. After three tries it is added without a battery (`battery not
+read after 3 tries`); restart the plugin once the light is steady to get the
+battery back.
 
 **Collecting logs.** `npx matterbridge-elgato@latest logs` (add `-f` to follow),
 or `docker logs matterbridge-elgato` if you started the container yourself. Turn

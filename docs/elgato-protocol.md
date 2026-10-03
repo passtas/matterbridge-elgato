@@ -327,12 +327,13 @@ prior art:
 | ----------------------- | -------------------------------------------------------------------------------- |
 | `powerSource`           | `1` power adapter / USB-C (live), `2` battery, `0` unknown `[prior-art]`         |
 | `level`                 | charge in percent, **fractional** (live)                                         |
-| `status`                | `2` fast charge (live); `0` not charging, `1` pre-charge, `3` complete `[prior-art]` |
+| `status`                | `0` not charging, `1` pre-charge, `2` fast charge (live), `3` complete           |
 | `currentBatteryVoltage` | battery voltage, mV (live: 3996–4007 while charging)                             |
 | `inputChargeVoltage`    | USB-C input voltage, mV                                                          |
 | `inputChargeCurrent`    | charge current, mA `[prior-art]`                                                 |
 
-python-elgato never saw `status` `1`. Treat any `status` not in the table as
+Only `status` `2` has been seen live; `0`, `1` and `3` are `[prior-art]`, and
+python-elgato never saw `1`. Treat any `status` not in the table as
 unknown, not as an error. The readings wobble between reads (3997 → 3996 →
 3997 mV and 96.15 → 94.65 → 96.15 % within seconds).
 
@@ -805,10 +806,13 @@ Rechargeable features, instead of the Wired one every other light gets:
 | `batVoltage`          | `currentBatteryVoltage` (both mV)                                                                       |
 | `batReplaceability`   | NotReplaceable                                                                                          |
 
-Because the readings wobble (§3, Key Light Mini), the percentage is only
-re-reported on a 1 % move, a threshold crossing, or reaching 0 / 100 %, and
-the voltage on a 20 mV move (`batteryUpdate` in `src/mapping.ts`). Charge state
-and level follow at once.
+Because the readings wobble (§3, Key Light Mini), the percentage is reported
+at once only when it crosses a threshold or reaches 0 / 100 %; otherwise it
+has to move 1 % or more **and** two consecutive reads have to agree on it
+(within one half-percent step, so a light charging a step per read still
+keeps up). A one-read dip like 96.15 → 94.65 → 96.15 % is never reported. The
+voltage follows a 20 mV move (`batteryUpdate` in `src/mapping.ts`). Charge
+state and level follow at once.
 
 Battery charge does not need the light's poll resolution, so it is read on
 every Nth poll tick (about every 30 s), never on a timer of its own (§2: one
@@ -863,21 +867,21 @@ const round1 = (v: number) => Math.round(v * 10) / 10;
 
 Captured live 2026-09-04, raw device output, in `test/fixtures/`, except the
 three `key-light-mini-*` files, which are synthetic (no capture of the Mini was
-kept, §3):
+kept, §3). The battery-info sample has the same shape as the live reading in §3:
 
-| File                                 | Source                                            |
-| ------------------------------------ | ------------------------------------------------- |
-| `key-light-air-accessory-info.json`  | `GET /elgato/accessory-info` @ 192.168.1.50       |
-| `key-light-air-lights.json`          | `GET /elgato/lights` (CCT schema 4a)              |
-| `key-light-air-lights-settings.json` | `GET /elgato/lights/settings`                     |
-| `light-strip-accessory-info.json`    | `GET /elgato/accessory-info` @ 192.168.1.51       |
-| `light-strip-lights-scene.json`      | `GET /elgato/lights` (scene schema 4c, "Rainbow") |
-| `light-strip-lights-hsv.json`        | `GET /elgato/lights` (HSV schema 4b)              |
-| `light-strip-lights-settings.json`   | `GET /elgato/lights/settings`                     |
-| `mdns-txt-records.json`              | `avahi-browse -rtp _elg._tcp` + `avahi-resolve`   |
-| `key-light-mini-battery-info.json`   | the published sample (Home Assistant fixture, schlarpc RE); same shape as the live reading in §3 |
-| `key-light-mini-accessory-info.json` | synthetic, Mini values (`hardwareBoardType` 202, fw 1.0.4 build 240) |
-| `key-light-mini-lights-settings.json` | synthetic, with the live `battery` block            |
+| File                                  | Source                                            |
+| ------------------------------------- | ------------------------------------------------- |
+| `key-light-air-accessory-info.json`   | `GET /elgato/accessory-info` @ 192.168.1.50       |
+| `key-light-air-lights.json`           | `GET /elgato/lights` (CCT schema 4a)              |
+| `key-light-air-lights-settings.json`  | `GET /elgato/lights/settings`                     |
+| `light-strip-accessory-info.json`     | `GET /elgato/accessory-info` @ 192.168.1.51       |
+| `light-strip-lights-scene.json`       | `GET /elgato/lights` (scene schema 4c, "Rainbow") |
+| `light-strip-lights-hsv.json`         | `GET /elgato/lights` (HSV schema 4b)              |
+| `light-strip-lights-settings.json`    | `GET /elgato/lights/settings`                     |
+| `mdns-txt-records.json`               | `avahi-browse -rtp _elg._tcp` + `avahi-resolve`   |
+| `key-light-mini-battery-info.json`    | published sample (HA fixture, schlarpc RE)        |
+| `key-light-mini-accessory-info.json`  | synthetic: dt 202, fw 1.0.4 build 240             |
+| `key-light-mini-lights-settings.json` | synthetic, with the live `battery` block          |
 
 ---
 

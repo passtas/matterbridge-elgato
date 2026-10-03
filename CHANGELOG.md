@@ -38,15 +38,16 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Light Strip costs one request and no log line. Battery values are read on
   every Nth poll, about every 30 seconds, never on a timer of their own, and a
   failed battery read never marks the light unreachable. Jitter is not
-  reported: the percentage follows a move of 1 % (or a threshold crossing, or
-  0 % / 100 %), the voltage a move of 20 mV; charge state and level follow at
-  once.
+  reported: the percentage follows a move of 1 % once two reads in a row agree
+  on it (a threshold crossing, or 0 % / 100 %, at once), the voltage a move of
+  20 mV; charge state and level follow at once.
   - A Mini that was already paired keeps its endpoint, room and automations;
     see `docs/troubleshooting.md` if the controller does not show the battery
     after the upgrade.
-  - A Mini that does not answer the battery probe is not added with a guess:
-    it goes to the retry queue like a light that is off, and is added, battery
-    included, once it answers.
+  - A Mini that does not answer the battery probe, or answers it with a 5xx, is
+    not added with a guess: it goes to the retry queue like a light that is
+    off, and is added, battery included, once it answers. After three such
+    tries it is added without a battery, with a warning; a restart asks again.
   - `npm run mock -- --mini` adds a mock Key Light Mini on port 9126.
 
 ### Changed

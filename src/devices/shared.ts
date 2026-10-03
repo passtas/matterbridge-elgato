@@ -121,6 +121,8 @@ export abstract class ElgatoDevice {
   #probedBattery: BatteryInfo | undefined;
   /** Successful poll ticks, to read the battery on every Nth. */
   #ticks = 0;
+  /** A battery percentage the last read held back, waiting for a second read to agree. */
+  #pendingPercent: number | null = null;
   #failures = 0;
   #reachable = true;
 
@@ -198,20 +200,19 @@ export abstract class ElgatoDevice {
    */
   protected async applyBattery(info: BatteryInfo, seed = false): Promise<void> {
     const push = this.attributeWriter(seed);
-    const update = seed
-      ? batteryUpdate({ batPercentRemaining: null, batChargeLevel: -1, batVoltage: null }, info)
-      : batteryUpdate(
-          {
-            batPercentRemaining: this.endpoint.getAttribute(
-              PowerSource.id,
-              "batPercentRemaining",
-            ) as number | null,
-            batChargeLevel: this.endpoint.getAttribute(PowerSource.id, "batChargeLevel") as number,
-            batVoltage: this.endpoint.getAttribute(PowerSource.id, "batVoltage") as number | null,
-          },
-          info,
-        );
-    for (const [attribute, value] of Object.entries(update)) {
+    const reported = seed
+      ? { batPercentRemaining: null, batChargeLevel: -1, batVoltage: null }
+      : {
+          batPercentRemaining: this.endpoint.getAttribute(PowerSource.id, "batPercentRemaining") as
+            | number
+            | null,
+          batChargeLevel: this.endpoint.getAttribute(PowerSource.id, "batChargeLevel") as number,
+          batVoltage: this.endpoint.getAttribute(PowerSource.id, "batVoltage") as number | null,
+          pendingPercent: this.#pendingPercent,
+        };
+    const { attributes, pendingPercent } = batteryUpdate(reported, info);
+    this.#pendingPercent = pendingPercent;
+    for (const [attribute, value] of Object.entries(attributes)) {
       await push(PowerSource.id, attribute, value as number, this.log);
     }
   }
@@ -300,7 +301,7 @@ export abstract class ElgatoDevice {
     this.#reachable = reachable;
     this.#failures = reachable ? 0 : this.#failures;
     // A Key Light Mini set to save energy turns its Wi-Fi off on low battery
-    // (docs/elgato-protocol.md §3, `lights/settings.battery.energySaving`).
+    // (`lights/settings.battery.energySaving`, issue #2 and docs/troubleshooting.md).
     const hint = this.hasBattery
       ? " (on battery it may have switched its Wi-Fi off to save energy)"
       : "";

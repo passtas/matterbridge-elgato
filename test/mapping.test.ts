@@ -6,6 +6,7 @@ import {
   BAT_CHARGE_LEVEL,
   BAT_CHARGE_STATE,
   batteryUpdate,
+  type ReportedBattery,
   DEVICE_TYPE_NAMES,
   clamp,
   detectCapability,
@@ -282,6 +283,21 @@ describe("battery hysteresis", () => {
     status,
     currentBatteryVoltage: millivolts,
   });
+  const steady = { batPercentRemaining: 192, batChargeLevel: Ok, batVoltage: 3997 };
+  /** Feed reads in turn, carrying the reported values and the held percentage along. */
+  const run = (start: typeof steady, levels: number[]): (number | undefined)[] => {
+    let reported: ReportedBattery = { ...start, pendingPercent: null };
+    return levels.map((level) => {
+      const { attributes, pendingPercent } = batteryUpdate(reported, reading(level));
+      reported = {
+        batPercentRemaining: attributes.batPercentRemaining ?? reported.batPercentRemaining,
+        batChargeLevel: attributes.batChargeLevel,
+        batVoltage: attributes.batVoltage ?? reported.batVoltage,
+        pendingPercent,
+      };
+      return attributes.batPercentRemaining;
+    });
+  };
 
   it("reports everything when nothing has been reported yet", () => {
     expect(
@@ -290,76 +306,98 @@ describe("battery hysteresis", () => {
         reading(96.15),
       ),
     ).toEqual({
-      batPercentRemaining: 192,
-      batChargeLevel: Ok,
-      batChargeState: BAT_CHARGE_STATE.IsCharging,
-      batVoltage: 3997,
+      attributes: {
+        batPercentRemaining: 192,
+        batChargeLevel: Ok,
+        batChargeState: BAT_CHARGE_STATE.IsCharging,
+        batVoltage: 3997,
+      },
+      pendingPercent: null,
     });
   });
 
-  it("holds the percentage under a 1 % move and follows one of 1 % or more", () => {
-    const reported = { batPercentRemaining: 192, batChargeLevel: Ok, batVoltage: 3997 };
-    expect(batteryUpdate(reported, reading(95.7)).batPercentRemaining).toBeUndefined(); // 191
-    expect(batteryUpdate(reported, reading(96.4)).batPercentRemaining).toBeUndefined(); // 193
-    expect(batteryUpdate(reported, reading(96.0)).batPercentRemaining).toBeUndefined(); // 192
-    expect(batteryUpdate(reported, reading(95.1)).batPercentRemaining).toBe(190);
-    expect(batteryUpdate(reported, reading(94.65)).batPercentRemaining).toBe(189);
+  it("never reports the documented one-read dip, 96.15 → 94.65 → 96.15 %", () => {
+    expect(run(steady, [94.65, 96.15, 94.65, 96.15])).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
   });
 
-  it("follows any percentage change that crosses a charge-level threshold", () => {
-    // 20.5 % → 20.1 %: one half-percent step that stays Ok, so it is held.
+  it("reports a move of 1 % or more once two consecutive reads agree on it", () => {
+    // 189, 189: the second read confirms.
+    expect(run(steady, [94.65, 94.6])).toEqual([undefined, 189]);
+    // A one-step change is under 1 % and is held however often it is read.
+    expect(run(steady, [95.7, 95.7, 95.7])).toEqual([undefined, undefined, undefined]);
+  });
+
+  it("keeps up with a charging light that gains about a step per read", () => {
+    // 150 reported; reads of 151, 152, 153, 154 confirm each other within a step.
+    expect(
+      run(
+        { batPercentRemaining: 150, batChargeLevel: Ok, batVoltage: 3800 },
+        [75.5, 76, 76.5, 77, 77.5],
+      ),
+    ).toEqual([undefined, 152, undefined, 154, undefined]);
+  });
+
+  it("reports a percentage that crosses a charge-level threshold at once", () => {
+    // 20.5 % → 20.1 %: one step that stays Ok, so it is held.
     expect(
       batteryUpdate(
         { batPercentRemaining: 41, batChargeLevel: Ok, batVoltage: 3700 },
         reading(20.1),
-      ).batPercentRemaining,
+      ).attributes.batPercentRemaining,
     ).toBeUndefined();
-    // 10.5 % → 9.8 %: one half-percent step, but Warning → Critical.
-    const atCritical = batteryUpdate(
-      { batPercentRemaining: 21, batChargeLevel: Warning, batVoltage: 3600 },
-      reading(9.8),
-    );
-    expect(atCritical).toMatchObject({ batPercentRemaining: 20, batChargeLevel: Critical });
-    // 20.5 % → 19.9 %: one half-percent step, but Ok → Warning.
-    const crossing = batteryUpdate(
-      { batPercentRemaining: 41, batChargeLevel: Ok, batVoltage: 3700 },
-      reading(19.9),
-    );
-    expect(crossing).toMatchObject({ batPercentRemaining: 40, batChargeLevel: Warning });
+    // 10.5 % → 9.8 %: one step, but Warning → Critical.
+    expect(
+      batteryUpdate(
+        { batPercentRemaining: 21, batChargeLevel: Warning, batVoltage: 3600 },
+        reading(9.8),
+      ).attributes,
+    ).toMatchObject({ batPercentRemaining: 20, batChargeLevel: Critical });
+    // 20.5 % → 19.9 %: one step, but Ok → Warning.
+    expect(
+      batteryUpdate(
+        { batPercentRemaining: 41, batChargeLevel: Ok, batVoltage: 3700 },
+        reading(19.9),
+      ).attributes,
+    ).toMatchObject({ batPercentRemaining: 40, batChargeLevel: Warning });
   });
 
-  it("always reports reaching 0 % or 100 %", () => {
+  it("always reports reaching 0 % or 100 % at once", () => {
     expect(
       batteryUpdate(
         { batPercentRemaining: 199, batChargeLevel: Ok, batVoltage: 4100 },
         reading(100),
-      ).batPercentRemaining,
+      ).attributes.batPercentRemaining,
     ).toBe(200);
     expect(
       batteryUpdate(
         { batPercentRemaining: 1, batChargeLevel: Critical, batVoltage: 3300 },
         reading(0.1),
-      ).batPercentRemaining,
+      ).attributes.batPercentRemaining,
     ).toBe(0);
   });
 
   it("holds the voltage under 20 mV and follows a move of 20 mV or more", () => {
-    const reported = { batPercentRemaining: 192, batChargeLevel: Ok, batVoltage: 3997 };
-    expect(batteryUpdate(reported, reading(96.15, 3996)).batVoltage).toBeUndefined();
-    expect(batteryUpdate(reported, reading(96.15, 4016)).batVoltage).toBeUndefined();
-    expect(batteryUpdate(reported, reading(96.15, 4017)).batVoltage).toBe(4017);
-    expect(batteryUpdate(reported, reading(96.15, 3977)).batVoltage).toBe(3977);
+    const voltage = (millivolts: number) =>
+      batteryUpdate(steady, reading(96.15, millivolts)).attributes.batVoltage;
+    expect(voltage(3996)).toBeUndefined();
+    expect(voltage(4016)).toBeUndefined();
+    expect(voltage(4017)).toBe(4017);
+    expect(voltage(3977)).toBe(3977);
   });
 
   it("always passes charge state and level through, and keeps the last values on garbage", () => {
-    const reported = { batPercentRemaining: 192, batChargeLevel: Ok, batVoltage: 3997 };
-    expect(batteryUpdate(reported, reading(96.15, 3997, 0))).toEqual({
+    expect(batteryUpdate(steady, reading(96.15, 3997, 0)).attributes).toEqual({
       batChargeLevel: Ok,
       batChargeState: BAT_CHARGE_STATE.IsNotCharging,
     });
-    expect(batteryUpdate(reported, { status: 3 })).toEqual({
-      batChargeLevel: Ok,
-      batChargeState: BAT_CHARGE_STATE.IsAtFullCharge,
+    expect(batteryUpdate(steady, { status: 3 })).toEqual({
+      attributes: { batChargeLevel: Ok, batChargeState: BAT_CHARGE_STATE.IsAtFullCharge },
+      pendingPercent: null,
     });
   });
 });

@@ -168,6 +168,22 @@ describe("ElgatoClient", () => {
     }
   });
 
+  it("treats a 5xx from battery-info as no answer, and an error body with HTTP 200 as final", async () => {
+    const mini = new MockElgatoDevice({ model: "key-light-mini" });
+    const client = new ElgatoClient("127.0.0.1", { port: await mini.start(), timeoutMs: 2000 });
+    try {
+      mini.batteryFault = 500;
+      await expect(client.probeBattery()).rejects.toMatchObject({ status: 500, refused: true });
+      expect(client.hasBattery).toBeUndefined();
+      mini.batteryFault = false;
+      mini.fault = "errors200";
+      expect(await client.probeBattery()).toBeUndefined();
+      expect(client.hasBattery).toBe(false);
+    } finally {
+      await mini.stop();
+    }
+  });
+
   it("brackets IPv6 literals in the base URL and follows host changes", () => {
     const client = new ElgatoClient("192.168.1.50");
     expect(client.baseUrl).toBe("http://192.168.1.50:9123");

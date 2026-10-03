@@ -78,7 +78,8 @@ export interface LightsSettings {
   /**
    * Only on a light with a battery (the Key Light Mini). Read-only here: the plugin
    * never writes battery settings. `energySaving.disableWifi: 1` makes the light drop
-   * off the network below `minimumBatteryLevel`. See docs/elgato-protocol.md §3.
+   * off the network below `minimumBatteryLevel` (prior art, issue #2; see
+   * docs/troubleshooting.md).
    */
   battery?: {
     energySaving: {

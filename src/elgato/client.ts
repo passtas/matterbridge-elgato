@@ -204,8 +204,10 @@ export class ElgatoClient {
    * only `["lights"]`, docs/elgato-protocol.md §3), so a future battery model works too.
    *
    * Returns the first reading when there is a battery and `undefined` when the device
-   * said no (a 404 or any other refusal). A "no" is final and never asked again. A
-   * request that got no answer at all throws and is not cached.
+   * said no: a 404, or an `errors` body with HTTP 200 (docs/elgato-protocol.md §3).
+   * A "no" is final and never asked again. Anything else throws and is not cached: no
+   * answer at all, a reply that does not parse, or a 5xx or other error status, which
+   * says the light is struggling, not that it has no battery.
    */
   async probeBattery(): Promise<BatteryInfo | undefined> {
     if (this.#hasBattery === false) return undefined;
@@ -214,7 +216,11 @@ export class ElgatoClient {
       this.#hasBattery = true;
       return info;
     } catch (error) {
-      if (error instanceof ElgatoHttpError && error.refused) {
+      if (
+        error instanceof ElgatoHttpError &&
+        error.refused &&
+        (error.status === 404 || error.status < 400)
+      ) {
         this.#hasBattery = false;
         return undefined;
       }
