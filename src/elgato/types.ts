@@ -93,6 +93,11 @@ export interface DiscoveredService {
   /** mDNS instance name, e.g. `Elgato Key Light Air 1A2B`. */
   instanceName: string;
   host: string;
+  /**
+   * The `.local` name from the SRV record, so the platform can ask mDNS for the
+   * light's address again when it stops answering at the one it has.
+   */
+  hostname?: string;
   port: number;
   txt: {
     /** Neither a reliable MAC nor a stable key, see docs/elgato-protocol.md §1. */

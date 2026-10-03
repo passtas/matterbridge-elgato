@@ -81,6 +81,15 @@ export const parseHost = (value: string): { host: string; port: number | undefin
   return { host: value, port: undefined };
 };
 
+/**
+ * The inverse of `parseHost`: the port is only spelled out when it is not 9123, so a
+ * real light keeps the same bare host string everywhere it is used as a key.
+ */
+export const formatHost = (host: string, port: number | undefined): string => {
+  if (port === undefined || port === 0 || port === ELGATO_PORT) return host;
+  return `${host.includes(":") ? `[${host}]` : host}:${port}`;
+};
+
 export interface ElgatoClientOptions {
   port?: number;
   timeoutMs?: number;
