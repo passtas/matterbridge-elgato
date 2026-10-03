@@ -32,7 +32,7 @@ bridge you already paired, with no new pairing step. Right if this is all new.**
 **Ordinary lights in the home app that is already on your phone.**
 
 - **Voice.** "Hey Google, office off" and the Key Light goes dark with the rest
-  of the room. Siri and Alexa should behave the same, since Matter treats all three alike, but nobody has confirmed those two yet.
+  of the room. Apple Home / Siri is confirmed too ([#4](https://github.com/passtas/matterbridge-elgato/issues/4#issuecomment-5839396738)); Alexa should behave the same since Matter treats all three alike, and awaits a confirmation in [#4](https://github.com/passtas/matterbridge-elgato/issues/4).
 - **Routines and schedules.** The lights join rooms and automations like any
   other bulb. A sunset routine warms the Key Light and turns the Strip amber with
   nothing in your hand.
@@ -134,7 +134,7 @@ history, for the whole bridge process rather than the plugin alone.
 | Alexa      | Echo 4th generation or newer                                                              | Expected, nobody has tried                                                                                          |
 | arm64      | Raspberry Pi or an ARM NAS                                                                | Image builds in CI, unrun                                                                                           |
 
-Add yours in [#4](https://github.com/passtas/matterbridge-elgato/issues/4).
+Add yours in [#4](https://github.com/passtas/matterbridge-elgato/issues/4) or open a [Device confirmation report](https://github.com/passtas/matterbridge-elgato/issues/new?template=device_confirmation.yml) (especially for unconfirmed models like Key Light `dt=53`, Key Light MK.2 `dt=205`, Key Light Mini `dt=202`, Ring Light `dt=201`, Light Strip Pro `dt=206`, Key Light Neo `dt=210` `_elg._tcp` mDNS output, Alexa/Home Assistant/SmartThings controllers, or `arm64` hosts).
 
 ## Install with your AI assistant
 
