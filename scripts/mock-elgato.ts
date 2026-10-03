@@ -50,6 +50,11 @@ export interface MockElgatoOptions {
   advertise?: boolean;
   /** mDNS instance name. Defaults to a "Mock ..." name so it cannot clash with a real light. */
   instanceName?: string;
+  /**
+   * Loopback address to listen on, `127.0.0.1` by default. Another one (`127.0.0.2`,
+   * Linux only) stands in for a light that came back on a new DHCP lease.
+   */
+  listenHost?: string;
 }
 
 /** One request the mock saw. */
@@ -90,6 +95,7 @@ export class MockElgatoDevice {
   #port: number;
   readonly #advertise: boolean;
   readonly #instanceName: string;
+  readonly #listenHost: string;
 
   constructor(options: MockElgatoOptions) {
     const profile = MOCK_MODELS[options.model];
@@ -100,6 +106,7 @@ export class MockElgatoDevice {
     this.settings = { ...profile.settings };
     this.light = { ...profile.light };
     this.#instanceName = options.instanceName ?? `Mock ${profile.info.displayName}`;
+    this.#listenHost = options.listenHost ?? "127.0.0.1";
   }
 
   get port(): number {
@@ -107,7 +114,7 @@ export class MockElgatoDevice {
   }
 
   get url(): string {
-    return `http://127.0.0.1:${this.#port}`;
+    return `http://${this.#listenHost}:${this.#port}`;
   }
 
   /** The light object a GET would return right now. */
@@ -119,8 +126,13 @@ export class MockElgatoDevice {
     this.#server = createServer((request, response) => {
       this.#handle(request, response);
     });
-    await new Promise<void>((resolve) => {
-      this.#server?.listen(this.#port, "127.0.0.1", resolve);
+    const server = this.#server;
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(this.#port, this.#listenHost, () => {
+        server.off("error", reject);
+        resolve();
+      });
     });
     this.#port = (this.#server.address() as AddressInfo).port;
 

@@ -16,6 +16,16 @@ export const DEFAULT_COLOR_DEBOUNCE_MS = 400;
 export const DISCOVERY_WINDOW_MS = 3000;
 /** Upper bound on how long `onShutdown` waits for in-flight device writes. */
 export const SHUTDOWN_FLUSH_TIMEOUT_MS = 2000;
+/** First wait before re-probing a light that could not be reached; doubles per failure. */
+export const RETRY_INITIAL_MS = 10_000;
+/** The backoff stops doubling here, so a light that comes back is found within 5 min. */
+export const RETRY_MAX_MS = 5 * 60_000;
+/** How often the retry timer looks for a due probe. Separate from the poll interval. */
+export const RETRY_TICK_MS = 5000;
+
+/** The wait before the next try, after one that has just failed. */
+export const nextRetryDelayMs = (previousMs: number): number =>
+  Math.min(previousMs * 2, RETRY_MAX_MS);
 
 /** One entry of the `devices` list: a light to probe whatever mDNS did or did not find. */
 export interface ManualDevice {

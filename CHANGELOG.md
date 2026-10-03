@@ -37,6 +37,34 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - An off that arrives while the Light Strip's scene is being put back no longer
   makes the next on forget to put it back again.
+- A light that announced itself on mDNS with its `.local` name but no address is
+  no longer lost until the next restart. In the Docker image, which cannot resolve
+  `.local` names, its probe failed with "fetch failed" and was never retried. The
+  plugin now keeps the A records it hears on the socket it already browses on
+  (the light sends its A record just before the announcement that lacks it), asks
+  mDNS for the address itself when it has none, sending the query a second time a
+  second later, and keeps the bare name only as a last resort.
+- A light that does not answer its first probe, whether announced on mDNS or listed
+  under `devices` and switched off when the bridge starts, is retried after 10 s,
+  then at doubling intervals capped at 5 minutes, on a timer of its own, so the poll
+  loop never waits on it. The first failure is still logged as an error, retries go
+  to debug, and the eventual success is logged at info. A Key Light Air MK.2 and
+  lights the white or black list rejects are never retried.
+- A `.local` host in the manual `devices` list now works in the Docker image. When
+  the system cannot resolve the name, the plugin asks mDNS for the address, at
+  startup and before each retry, and does so even with `enableMdns` off, where it
+  opens the mDNS socket for these lookups but browses nothing.
+- A registered light that came back on a new DHCP lease is followed there: when it
+  stops answering at its IP address, its `.local` name is looked up again, at the
+  retry backoff. bonjour-service reports no address changes by itself.
+- A light in the `devices` list that was off at startup and then announced itself
+  on mDNS registers under its configured `name`, not its mDNS one, so the next
+  restart does not turn it into a new device for the controllers.
+- A failing mDNS socket (port taken, no permission) logs a warning and turns `.local`
+  lookups off instead of crashing the bridge.
+- A light registered after startup has its state read into Matter straight away,
+  instead of at the first poll.
+- An mDNS announcement on a port other than 9123 is probed on that port.
 
 ## [0.1.1] - 2026-09-05
 

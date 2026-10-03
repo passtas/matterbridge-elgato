@@ -9,10 +9,21 @@ pairing code, the plugin config and the device list.
 ## How it works
 
 - Lights announce themselves on mDNS as `_elg._tcp`, and the plugin browses for
-  them continuously rather than once at startup.
+  them continuously rather than once at startup. A light switched on later joins
+  the bridge when it announces itself, with no restart.
+- An announcement that names the light but carries no address is resolved with an
+  mDNS query of the plugin's own, so it works in a container that cannot look up
+  `.local` names. A `.local` host in the manual `devices` list gets the same
+  treatment when the system cannot resolve it, even with `enableMdns` off.
+- A light that does not answer, whether found on mDNS or listed under `devices`,
+  is tried again after 10 seconds, then at doubling intervals up to every 5
+  minutes, until it answers.
 - Each light is filed under the serial number from its own
   `/elgato/accessory-info`, so a changed IP address moves the entry rather than
-  creating a second one.
+  creating a second one. A light that stops answering is looked up by its `.local`
+  name again, so one that came back on a new DHCP lease is followed there.
+- A light in the `devices` list keeps its configured `name` even when mDNS finds it
+  first, for example when it was off while the bridge started.
 - The Matter device type comes from the shape of the light's state: a light that
   reports a color temperature becomes a ColorTemperatureLight, one that reports
   hue and saturation becomes an ExtendedColorLight. Unknown models are handled by
@@ -28,6 +39,50 @@ pairing code, the plugin config and the device list.
   replays it when the light is switched back on. With `preserveSceneOnOff` on,
   switching off keeps the scene on the light as well (see
   [Light Strip scenes](configuration.md#light-strip-scenes)).
+
+### Addresses from mDNS
+
+The plugin browses with bonjour-service 1.4.4, which only attaches the A and AAAA
+records that arrive in the same packet as the light's PTR record, and never
+revisits them. Read from its `dist/lib/browser.js`:
+
+- `buildServicesFor` (lines 158-205) builds a service only from a packet holding a
+  PTR for `_elg._tcp.local`, so a later packet with just the A record is ignored.
+- For a light already seen, only the SRV fields (lines 111-120) and the TXT record
+  (121-130) are compared, never the addresses, so no event follows either.
+- `update()` (85-87) only re-sends the PTR query, and `up` is only emitted for a
+  light not seen before (104-110), so asking again changes nothing.
+  `browser.services` (101-103) holds the same first record.
+
+- An address change on its own raises no event either, and bonjour never expires
+  a service (`expire()` exists, nothing calls it). `srv-update` only means the SRV
+  target or port changed.
+
+A Key Light Mini powered on while the bridge runs sends its A record in packets of
+its own, a second before the PTR packet bonjour builds the service from, so its
+`up` arrives with no address and stays at its `.local` name, which a Docker
+container cannot resolve. The plugin therefore listens on bonjour's multicast
+socket itself (`bonjour.server.mdns`, set in `dist/lib/bonjour.js` line 15):
+
+- Every A record heard there is kept for its TTL, at most 2 minutes, and a TTL of
+  0 (a goodbye) drops it. Usually the address of a name-only `up` is already known.
+- Otherwise it sends an A query, and sends it again a second later within the 2 s
+  window, because a light does not repeat an answer within 1 s of its last one
+  (RFC 6762 §6) and ignores a query that lands just after its own announcement.
+- It asks again whenever a probe of a light gets no answer, and when a registered
+  light that sits on an IP address stops answering, at the retry backoff, so a
+  light on a new lease is followed. A light kept on its name is left to the OS
+  resolver.
+- A `.local` host in the manual list is probed by name first, so a system whose
+  resolver speaks mDNS keeps using the name and follows the light's address
+  changes; only when that fails is the address from mDNS used. With `enableMdns`
+  off, the plugin opens the mDNS socket for these lookups but browses nothing.
+- If the socket fails (the port taken, or no permission), the plugin logs a
+  warning and stops looking names up, rather than taking the bridge down:
+  multicast-dns reports that as an `error` event that bonjour does not handle.
+
+The announcement's source address (`service.referer`) is not used, because behind
+an mDNS reflector it is the reflector's.
 
 ## Limitations
 
