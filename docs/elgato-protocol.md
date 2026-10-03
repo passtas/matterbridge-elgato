@@ -807,3 +807,6 @@ it reverts to the previous HSV object, as §8 describes for the off direction.)
 > `{on: 0}` and replays the cached scene on the next `on`, which the user sees as
 > the same thing – but it is what makes a byte-exact restore of a
 > parked-in-a-scene strip possible, and `test/live.test.ts` relies on it.
+> The opt-in `preserveSceneOnOff` flag (unreleased at the time of writing, issue
+> #3) makes the Matter Off do exactly this, falling back to one bare `{on: 0}`
+> if the body is rejected.

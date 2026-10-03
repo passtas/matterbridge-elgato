@@ -17,7 +17,8 @@ import {
   xyColorToRgbColor,
 } from "matterbridge/utils";
 
-import type { LightState, SceneLightState } from "../elgato/types.ts";
+import { ElgatoHttpError } from "../elgato/client.ts";
+import type { LightState, LightsResponse, SceneLightState } from "../elgato/types.ts";
 import {
   MIN_LEVEL,
   clamp,
@@ -30,7 +31,7 @@ import {
   toMatterLevel,
   toMatterSaturation,
 } from "../mapping.ts";
-import { type SceneStore, sceneToPatch } from "./scenes.ts";
+import { type SceneStore, sameScene, sceneToPatch } from "./scenes.ts";
 import {
   type ApplyOptions,
   type DeviceContext,
@@ -50,14 +51,24 @@ export const STRIP_CT_MAX_MIREDS = 500;
 
 export interface StripContext extends DeviceContext {
   sceneStore?: SceneStore;
+  /** Switch off by parking the scene rather than destroying it. See `#switchOff`. */
+  preserveSceneOnOff?: boolean;
 }
 
 export class LightStripDevice extends ElgatoDevice {
   readonly #sceneStore: SceneStore | undefined;
   readonly #colorDebounceMs: number;
+  readonly #preserveSceneOnOff: boolean;
   #cachedScene: SceneLightState | undefined;
   #sceneActive = false;
+  /** Last seen in schema 4c with `on: 0`: off, but holding its scene. */
+  #sceneParked = false;
   #resumeScene = false;
+  /**
+   * Bumped by every command that sets the power state (on, off, level-with-on/off), so
+   * an off that is still waiting on the strip can tell a newer one has overtaken it.
+   */
+  #powerGeneration = 0;
   #colorMode: ColorControl.ColorMode | undefined;
   #colorTimer: NodeJS.Timeout | undefined;
   #pendingHue: number | undefined;
@@ -67,6 +78,7 @@ export class LightStripDevice extends ElgatoDevice {
     super(context);
     this.#colorDebounceMs = context.colorDebounceMs;
     this.#sceneStore = context.sceneStore;
+    this.#preserveSceneOnOff = context.preserveSceneOnOff === true;
     this.#cachedScene = context.sceneStore?.load(context.serial);
   }
 
@@ -81,6 +93,10 @@ export class LightStripDevice extends ElgatoDevice {
 
   get resumeScene(): boolean {
     return this.#resumeScene;
+  }
+
+  get sceneParked(): boolean {
+    return this.#sceneParked;
   }
 
   protected override createEndpoint(context: DeviceContext): MatterbridgeEndpoint {
@@ -114,20 +130,26 @@ export class LightStripDevice extends ElgatoDevice {
         this.log.info(`${this.deviceName}: identify for ${request.identifyTime}s`);
       })
       .addCommandHandler("on", async () => {
-        if (this.#resumeScene && this.#cachedScene) {
+        const generation = ++this.#powerGeneration;
+        // A strip parked off inside a scene does not resume it on a bare `on: 1`, it
+        // reverts to the previous HSV state (docs/elgato-protocol.md, addendum). Only
+        // the whole scene body brings it back. Gated on the flag so that without it the
+        // wire traffic is exactly what v0.1 sent.
+        const parked = this.#preserveSceneOnOff && this.#sceneParked;
+        if ((this.#resumeScene || parked) && this.#cachedScene) {
           this.log.info(`${this.deviceName}: putting the scene "${this.#cachedScene.name}" back`);
           // Only forget the intent once the device has actually taken the scene back,
-          // otherwise a failed write loses it until the next scene is observed.
-          if (await this.write(sceneToPatch(this.#cachedScene), ["onOff"])) {
-            this.#resumeScene = false;
-          }
+          // otherwise a failed write loses it until the next scene is observed. And not
+          // if an off arrived meanwhile: it queued behind this write, will destroy the
+          // scene again, and set the intent that this line would otherwise clear.
+          const resumed = await this.write(sceneToPatch(this.#cachedScene), ["onOff"]);
+          if (resumed && generation === this.#powerGeneration) this.#resumeScene = false;
           return;
         }
         await this.write({ on: 1 }, ["onOff"]);
       })
       .addCommandHandler("off", async () => {
-        if (this.#sceneActive) this.#resumeScene = true;
-        await this.write({ on: 0 }, ["onOff"]);
+        await this.#switchOff(++this.#powerGeneration, ["onOff"]);
       })
       .addCommandHandler("moveToLevel", async ({ request }) => {
         this.#resumeScene = false;
@@ -136,9 +158,9 @@ export class LightStripDevice extends ElgatoDevice {
       .addCommandHandler("moveToLevelWithOnOff", async ({ request }) => {
         // matter.js crops to minLevel 1 and couples OnOff to false there: level 1 or
         // below is an off, not a dim to 3 %.
+        const generation = ++this.#powerGeneration;
         if (request.level <= MIN_LEVEL) {
-          if (this.#sceneActive) this.#resumeScene = true;
-          await this.write({ on: 0 }, ["level", "onOff"]);
+          await this.#switchOff(generation, ["level", "onOff"]);
           return;
         }
         this.#resumeScene = false;
@@ -186,6 +208,89 @@ export class LightStripDevice extends ElgatoDevice {
           ["ct"],
         );
       });
+  }
+
+  /**
+   * Matter Off, and a level command cropped to off. A bare `{on: 0}` destroys a running
+   * scene and reverts the strip to its previous HSV state (docs/elgato-protocol.md §8),
+   * so the next on replays the cached scene either way.
+   *
+   * With `preserveSceneOnOff`, the cached scene goes out with `on: 0` in the same body
+   * instead, and the strip parks off with the scene still stored (addendum, "`on: 0`
+   * sent in the same body as a scene"). Never `brightness: 0` as an off: that leaves
+   * the light on at zero output (§10, quirk 3).
+   */
+  async #switchOff(generation: number, skip: readonly OwnedAttribute[]): Promise<void> {
+    if (this.#sceneActive) this.#resumeScene = true;
+    const scene = this.#canPark() ? this.#cachedScene : undefined;
+    if (!scene) {
+      await this.write({ on: 0 }, skip);
+      return;
+    }
+
+    let response: LightsResponse;
+    try {
+      response = await this.queue.push({ ...sceneToPatch(scene), on: 0 });
+    } catch (error) {
+      await this.#parkRejected(error, scene, generation, skip);
+      return;
+    }
+    // Outside the try: the park landed, so a failure from here on must not turn into
+    // a bare off that would destroy it.
+    try {
+      await this.applyEcho(response, skip);
+    } catch (error) {
+      this.log.error(`${this.deviceName}: parked, but ${(error as Error).message}`);
+    }
+  }
+
+  /**
+   * Park only from a settled state. A write still queued or in flight, or a color change
+   * waiting in the debounce, may already have destroyed the scene on the device, and
+   * the queue would fold that write into the scene body and drop it (writeQueue.ts).
+   * Then the plain v0.1 off is the right answer.
+   */
+  #canPark(): boolean {
+    return (
+      this.#preserveSceneOnOff &&
+      this.#sceneActive &&
+      this.queue.idle &&
+      this.#colorTimer === undefined &&
+      this.#pendingHue === undefined &&
+      this.#pendingSaturation === undefined
+    );
+  }
+
+  /** The scene-preserving off did not land. Decide whether a bare off should follow. */
+  async #parkRejected(
+    error: unknown,
+    scene: SceneLightState,
+    generation: number,
+    skip: readonly OwnedAttribute[],
+  ): Promise<void> {
+    const message = (error as Error).message;
+    // The issue asked for a fallback on any throw. Only a refusal from the strip (an
+    // HTTP error status, or an `errors` body) proves the park did not land, though. A
+    // timeout, a reset or a garbled 200 may hide a park that did, which a bare off
+    // would then destroy, and a second write to a light that did not answer the first
+    // costs another full timeout. So log it the way `write` does and let the next
+    // poll reconcile, as v0.1 does for a failed off.
+    if (!(error instanceof ElgatoHttpError) || !error.refused) {
+      this.log.error(`${this.deviceName} did not accept the change: ${message}`);
+      return;
+    }
+    // A newer on or off overtook this one while the strip was answering. Sending the
+    // bare off now would land after it and switch the light off behind its back.
+    if (generation !== this.#powerGeneration) {
+      this.log.debug(`${this.deviceName}: could not park "${scene.name}" (${message}), superseded`);
+      return;
+    }
+    // The light going off is not optional: one bare off, and no retry of the scene
+    // body. The Strip 400s anything it dislikes (§6).
+    this.log.debug(
+      `${this.deviceName}: could not park "${scene.name}" (${message}), switching off without it`,
+    );
+    await this.write({ on: 0 }, skip);
   }
 
   /**
@@ -243,9 +348,14 @@ export class LightStripDevice extends ElgatoDevice {
     const push = this.attributeWriter(options.seed);
 
     this.#sceneActive = isSceneState(light);
+    // Parked is still scene mode: cache it, report off, keep the scene master level.
+    this.#sceneParked = this.#sceneActive && light.on === 0;
     if (isSceneState(light)) {
+      // Persist only a scene that is new. A strip parked in a scene reports it on every
+      // poll all night, and each save is a disk write (an SD card, on a Pi).
+      const changed = !this.#cachedScene || !sameScene(this.#cachedScene, light);
       this.#cachedScene = light;
-      this.#sceneStore?.save(this.serial, light);
+      if (changed) this.#sceneStore?.save(this.serial, light);
     }
 
     if (!skip.includes("onOff")) await push(OnOff.id, "onOff", light.on === 1, this.log);

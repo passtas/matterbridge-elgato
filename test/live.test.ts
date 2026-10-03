@@ -8,7 +8,9 @@
  *   ELGATO_LIGHT_STRIP_HOST=192.168.1.51 npm run test:live
  *
  * Both devices are captured before the run and restored byte-identically afterwards,
- * scene included.
+ * scene included. A second suite then runs the Light Strip alone with
+ * `preserveSceneOnOff` on, which needs a scene to play: start one in the Elgato app
+ * before the run, or that suite skips itself and says so.
  */
 
 import type { MatterbridgeEndpoint, PlatformConfig } from "matterbridge";
@@ -28,6 +30,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ElgatoClient } from "../src/elgato/client.ts";
 import type { LightStripDevice } from "../src/devices/lightStrip.ts";
+import { sceneToPatch } from "../src/devices/scenes.ts";
 import { ElgatoPlatform } from "../src/index.ts";
 import { isSceneState } from "../src/mapping.ts";
 import type { LightState } from "../src/elgato/types.ts";
@@ -58,6 +61,30 @@ let keyLight: MatterbridgeEndpoint;
 let strip: MatterbridgeEndpoint;
 let keyLightBefore: LightState;
 let stripBefore: LightState;
+/** Both suites share one server node, stopped once at the very end. */
+let nodeStarted = false;
+
+// Shared by both suites and set up here, not in either one, so that each suite can
+// also run alone (`-t "preserveSceneOnOff"`).
+beforeAll(async () => {
+  if (!LIVE) return;
+  keyLightSerial = (await keyLightClient.getAccessoryInfo()).serialNumber;
+  stripSerial = (await stripClient.getAccessoryInfo()).serialNumber;
+  keyLightBefore = await readLight(keyLightClient);
+  stripBefore = await readLight(stripClient);
+  log?.notice?.(`live: captured KLA ${JSON.stringify(keyLightBefore)}`);
+  log?.notice?.(`live: captured STRIP ${JSON.stringify(stripBefore)}`);
+
+  await setupTest("ElgatoLive", false);
+  await createTestEnvironment();
+  await createServerNode(MATTER_TEST_PORT);
+  await startServerNode();
+  nodeStarted = true;
+}, 60_000);
+
+afterAll(async () => {
+  if (nodeStarted) await stopServerNode();
+}, 60_000);
 
 const readLight = async (client: ElgatoClient): Promise<LightState> => {
   const state = (await client.getLights()).lights[0];
@@ -87,18 +114,6 @@ const command = async (
 
 describe.skipIf(!LIVE)("live devices", () => {
   beforeAll(async () => {
-    keyLightSerial = (await keyLightClient.getAccessoryInfo()).serialNumber;
-    stripSerial = (await stripClient.getAccessoryInfo()).serialNumber;
-    keyLightBefore = await readLight(keyLightClient);
-    stripBefore = await readLight(stripClient);
-    log?.notice?.(`live: captured KLA ${JSON.stringify(keyLightBefore)}`);
-    log?.notice?.(`live: captured STRIP ${JSON.stringify(stripBefore)}`);
-
-    await setupTest("ElgatoLive", false);
-    await createTestEnvironment();
-    await createServerNode(MATTER_TEST_PORT);
-    await startServerNode();
-
     platform = new ElgatoPlatform(
       getMatterbridge(),
       log as AnsiLogger,
@@ -107,7 +122,8 @@ describe.skipIf(!LIVE)("live devices", () => {
         type: "DynamicPlatform",
         version: "0.1.0",
         debug: false,
-        unregisterOnShutdown: false,
+        // Frees the serials for the preserveSceneOnOff suite's own platform below.
+        unregisterOnShutdown: true,
         enableMdns: false,
         pollInterval: 1000,
         colorDebounce: 0,
@@ -124,7 +140,6 @@ describe.skipIf(!LIVE)("live devices", () => {
 
   afterAll(async () => {
     if (platform) await platform.onShutdown("live");
-    await stopServerNode();
     if (keyLightBefore) await restore(keyLightClient, keyLightBefore);
     if (stripBefore) await restore(stripClient, stripBefore);
   }, 60_000);
@@ -228,6 +243,86 @@ describe.skipIf(!LIVE)("live devices", () => {
     await restore(keyLightClient, keyLightBefore);
     await restore(stripClient, stripBefore);
     expect(await readLight(keyLightClient)).toEqual(keyLightBefore);
+    expect(await readLight(stripClient)).toEqual(stripBefore);
+  });
+});
+
+describe.skipIf(!LIVE)("live Light Strip with preserveSceneOnOff", () => {
+  let flagPlatform: ElgatoPlatform;
+  let flagStrip: MatterbridgeEndpoint;
+  let flagDevice: LightStripDevice;
+
+  beforeAll(async () => {
+    flagPlatform = new ElgatoPlatform(
+      getMatterbridge(),
+      log as AnsiLogger,
+      {
+        name: "matterbridge-elgato",
+        type: "DynamicPlatform",
+        version: "0.1.0",
+        debug: false,
+        unregisterOnShutdown: true,
+        enableMdns: false,
+        pollInterval: 1000,
+        colorDebounce: 0,
+        preserveSceneOnOff: true,
+        devices: [{ host: STRIP_HOST as string }],
+      } as PlatformConfig,
+    );
+    addMatterbridge(flagPlatform);
+    await flagPlatform.onStart("live flag");
+    await flagPlatform.onConfigure();
+    // Polls are driven by hand, so none can land between a command and its check.
+    flagPlatform.clearIntervals();
+    flagStrip = flagPlatform.getDeviceBySerialNumber(stripSerial) as MatterbridgeEndpoint;
+    flagDevice = flagPlatform.devices.get(stripSerial) as LightStripDevice;
+  }, 60_000);
+
+  afterAll(async () => {
+    if (flagPlatform) await flagPlatform.onShutdown("live flag");
+    if (stripBefore) await restore(stripClient, stripBefore);
+  }, 60_000);
+
+  it("parks a scene on Off and puts it back on On", async (context) => {
+    await flagPlatform.pollAll();
+    const cached = flagDevice.cachedScene;
+    if (!cached) {
+      context.skip(
+        "no Light Strip scene cached: start a scene in the Elgato app, then run the live tests again",
+      );
+      return;
+    }
+
+    // Play the cached scene, whatever state the strip was captured in.
+    await stripClient.putLights(sceneToPatch(cached));
+    await flagPlatform.pollAll();
+    expect(flagDevice.sceneActive).toBe(true);
+
+    await command(flagStrip, "off");
+    const parked = await readLight(stripClient);
+    // Still the scene schema, switched off: the scene survived the off.
+    expect(isSceneState(parked)).toBe(true);
+    expect(parked.on).toBe(0);
+    expect(parked.id).toBe(cached.id);
+    expect(parked.scene).toEqual(cached.scene);
+
+    await flagPlatform.pollAll();
+    expect(flagDevice.sceneParked).toBe(true);
+    expect(flagStrip.getAttribute(OnOff.id, "onOff")).toBe(false);
+
+    await command(flagStrip, "on");
+    const resumed = await readLight(stripClient);
+    expect(isSceneState(resumed)).toBe(true);
+    expect(resumed.on).toBe(1);
+    expect(resumed.id).toBe(cached.id);
+    expect(resumed.scene).toEqual(cached.scene);
+
+    await flagPlatform.pollAll();
+    expect(flagStrip.getAttribute(OnOff.id, "onOff")).toBe(true);
+  });
+
+  it("restores the strip to its captured state", async () => {
+    await restore(stripClient, stripBefore);
     expect(await readLight(stripClient)).toEqual(stripBefore);
   });
 });

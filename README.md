@@ -63,7 +63,9 @@ Apple TV, an Echo of the 4th generation or newer.
 
 [Install notes](docs/install.md) has the flags, the compose file, a `docker run`
 one-liner and per-NAS notes. [Configuration](docs/configuration.md) has the poll
-interval, manual addresses, lists and device names.
+interval, manual addresses, lists, device names and `preserveSceneOnOff`, the
+opt-in that keeps a Light Strip's scene on the light while it is off (off by
+default, because it changes what is stored on the light).
 [How it works](docs/how-it-works.md) has discovery, polling, clamping and the
 limits, and [Troubleshooting](docs/troubleshooting.md) covers what to do when
 nothing is found or pairing never completes.

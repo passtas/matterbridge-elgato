@@ -25,7 +25,9 @@ pairing code, the plugin config and the device list.
   and a Light Strip answers HTTP 400 instead.
 - The Light Strip loses its running scene the moment anything else is written and
   cannot list its scenes back, so the plugin remembers the last scene it saw and
-  replays it when the light is switched back on.
+  replays it when the light is switched back on. With `preserveSceneOnOff` on,
+  switching off keeps the scene on the light as well (see
+  [Light Strip scenes](configuration.md#light-strip-scenes)).
 
 ## Limitations
 

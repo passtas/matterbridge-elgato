@@ -35,6 +35,12 @@
       "type": "boolean",
       "default": true
     },
+    "preserveSceneOnOff": {
+      "title": "Keep the Light Strip scene when switched off",
+      "description": "Switch a Light Strip that is playing a scene off by sending the scene back with the light off, so the scene stays on the light instead of being replaced by a plain color. Falls back to a plain off if the light rejects it. Off by default because it changes what is stored on the light.",
+      "type": "boolean",
+      "default": false
+    },
     "devices": {
       "title": "Manual devices",
       "description": "Lights to add by address, for networks where mDNS does not work. Host may include a port. Name is optional and overrides the name set in the Elgato app.",
