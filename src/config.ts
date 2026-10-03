@@ -67,3 +67,23 @@ export const mdnsEnabled = (config: PlatformConfig): boolean => config.enableMdn
  */
 export const preserveSceneOnOff = (config: PlatformConfig): boolean =>
   config.preserveSceneOnOff === true;
+
+/**
+ * How often a battery light's `battery-info` is read. Charge does not need the 3 s
+ * resolution of the light state, and the firmware serves one request at a time
+ * (docs/elgato-protocol.md §2), so it rides along on every Nth poll tick instead of
+ * on a timer of its own.
+ */
+export const BATTERY_POLL_INTERVAL_MS = 30_000;
+
+/** Every how many poll ticks the battery is read: about 30 s whatever `pollInterval` is. */
+export const batteryPollEvery = (config: PlatformConfig): number =>
+  Math.max(1, Math.round(BATTERY_POLL_INTERVAL_MS / pollIntervalMs(config)));
+
+/**
+ * Unanswered battery probes a light gets before it is added without a battery. Its
+ * lights endpoint works, so retrying for ever would lose a light that registers fine
+ * without one; the wired PowerSource persists nothing, so a later restart that does
+ * read the battery rebuilds it cleanly.
+ */
+export const BATTERY_PROBE_ATTEMPTS = 3;

@@ -3,7 +3,8 @@
  * `GET /elgato/lights` returns `{ on, brightness, temperature }`
  * (docs/elgato-protocol.md §4a).
  *
- * Matter side: ColorTemperatureLight with a CT-only ColorControl server.
+ * Matter side: ColorTemperatureLight with a CT-only ColorControl server, and a
+ * PowerSource cluster that reports the battery on a Key Light Mini.
  */
 
 import {
@@ -24,39 +25,43 @@ import {
   toMatterLevel,
   toMatterMireds,
 } from "../mapping.ts";
-import { type ApplyOptions, type DeviceContext, ElgatoDevice, VENDOR_NAME } from "./shared.ts";
+import {
+  type ApplyOptions,
+  type DeviceContext,
+  ElgatoDevice,
+  VENDOR_NAME,
+  withPowerSource,
+} from "./shared.ts";
 
 /** Mid-range default; overwritten by the first seed/poll. */
 const DEFAULT_MIREDS = 200;
 
 export class KeyLightDevice extends ElgatoDevice {
   protected override createEndpoint(context: DeviceContext): MatterbridgeEndpoint {
-    return (
-      new MatterbridgeEndpoint(
-        [colorTemperatureLight, bridgedNode, powerSource],
-        { id: context.serial },
-        context.debug,
+    const endpoint = new MatterbridgeEndpoint(
+      [colorTemperatureLight, bridgedNode, powerSource],
+      { id: context.serial },
+      context.debug,
+    )
+      .createDefaultIdentifyClusterServer()
+      .createDefaultBridgedDeviceBasicInformationClusterServer(
+        context.deviceName,
+        context.serial,
+        context.vendorId,
+        VENDOR_NAME,
+        context.info.productName,
+        context.info.firmwareBuildNumber,
+        context.info.firmwareVersion,
+        Number(context.info.hardwareRevision) || 1,
+        String(context.info.hardwareRevision),
       )
-        .createDefaultIdentifyClusterServer()
-        .createDefaultBridgedDeviceBasicInformationClusterServer(
-          context.deviceName,
-          context.serial,
-          context.vendorId,
-          VENDOR_NAME,
-          context.info.productName,
-          context.info.firmwareBuildNumber,
-          context.info.firmwareVersion,
-          Number(context.info.hardwareRevision) || 1,
-          String(context.info.hardwareRevision),
-        )
-        .createDefaultOnOffClusterServer()
-        .createDefaultLevelControlClusterServer()
-        // matterbridge's default physical minimum is 147 mireds, warmer than the
-        // Elgato's real 143. Pass the range explicitly or lose the coolest end.
-        .createCtColorControlClusterServer(DEFAULT_MIREDS, MIN_MIREDS, MAX_MIREDS)
-        .createDefaultPowerSourceWiredClusterServer()
-        .addRequiredClusterServers()
-    );
+      .createDefaultOnOffClusterServer()
+      .createDefaultLevelControlClusterServer()
+      // matterbridge's default physical minimum is 147 mireds, warmer than the
+      // Elgato's real 143. Pass the range explicitly or lose the coolest end.
+      .createCtColorControlClusterServer(DEFAULT_MIREDS, MIN_MIREDS, MAX_MIREDS);
+    // Wired, or Battery + Rechargeable on a Key Light Mini.
+    return withPowerSource(endpoint, context.battery).addRequiredClusterServers();
   }
 
   protected override registerHandlers(): void {

@@ -129,6 +129,61 @@ describe("ElgatoClient", () => {
     await expect(dead.getLights()).rejects.toMatchObject({ emptyReply: false });
   }, 10_000);
 
+  it("probes battery-info once on a light without a battery and never asks again", async () => {
+    const client = new ElgatoClient("127.0.0.1", { port: keyLight.port, timeoutMs: 2000 });
+    const count = (): number =>
+      keyLight.requests.filter((request) => request.path === "/elgato/battery-info").length;
+    const before = count();
+    expect(client.hasBattery).toBeUndefined();
+    expect(await client.probeBattery()).toBeUndefined();
+    expect(client.hasBattery).toBe(false);
+    expect(await client.probeBattery()).toBeUndefined();
+    expect(count() - before).toBe(1);
+  });
+
+  it("reads battery-info from a Key Light Mini and remembers it has a battery", async () => {
+    const mini = new MockElgatoDevice({ model: "key-light-mini" });
+    const client = new ElgatoClient("127.0.0.1", { port: await mini.start(), timeoutMs: 2000 });
+    try {
+      expect(await client.probeBattery()).toMatchObject({ level: 78.57, status: 2 });
+      expect(client.hasBattery).toBe(true);
+      expect((await client.getBatteryInfo()).currentBatteryVoltage).toBe(3860);
+    } finally {
+      await mini.stop();
+    }
+  });
+
+  it("does not cache a battery probe that got no answer", async () => {
+    const mini = new MockElgatoDevice({ model: "key-light-mini" });
+    const client = new ElgatoClient("127.0.0.1", { port: await mini.start(), timeoutMs: 2000 });
+    try {
+      mini.batteryFault = true;
+      await expect(client.probeBattery()).rejects.toBeInstanceOf(ElgatoHttpError);
+      expect(client.hasBattery).toBeUndefined();
+      mini.batteryFault = false;
+      expect(await client.probeBattery()).toBeDefined();
+      expect(client.hasBattery).toBe(true);
+    } finally {
+      await mini.stop();
+    }
+  });
+
+  it("treats a 5xx from battery-info as no answer, and an error body with HTTP 200 as final", async () => {
+    const mini = new MockElgatoDevice({ model: "key-light-mini" });
+    const client = new ElgatoClient("127.0.0.1", { port: await mini.start(), timeoutMs: 2000 });
+    try {
+      mini.batteryFault = 500;
+      await expect(client.probeBattery()).rejects.toMatchObject({ status: 500, refused: true });
+      expect(client.hasBattery).toBeUndefined();
+      mini.batteryFault = false;
+      mini.fault = "errors200";
+      expect(await client.probeBattery()).toBeUndefined();
+      expect(client.hasBattery).toBe(false);
+    } finally {
+      await mini.stop();
+    }
+  });
+
   it("brackets IPv6 literals in the base URL and follows host changes", () => {
     const client = new ElgatoClient("192.168.1.50");
     expect(client.baseUrl).toBe("http://192.168.1.50:9123");

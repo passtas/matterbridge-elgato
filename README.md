@@ -96,17 +96,17 @@ Lights are found on their own over mDNS and filed by serial number, so a changed
 DHCP address moves an entry rather than making a second one. This table is about
 what has been confirmed.
 
-| Model              | Model number                          | Type code (`dt`) | Status                                                                                                |
-| ------------------ | ------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------- |
-| Key Light Air      | 20LAB9901 (10LAB9901)                 | 200              | Verified                                                                                              |
-| Light Strip        | 20LAA9901 (10LAA9901)                 | 70               | Verified                                                                                              |
-| Key Light          | 20GAK9901 (10GAK9901)                 | 53               | Expected, please confirm                                                                              |
-| Key Light MK.2     | unknown (10GAK9901, same as the MK.I) | 205              | Expected, please confirm                                                                              |
-| Key Light Mini     | 20LAD9901 (10LAD9901)                 | 202              | Verified; battery not reported yet, see [#2](https://github.com/passtas/matterbridge-elgato/issues/2) |
-| Ring Light         | 20LAC9901 (10LAC9901)                 | 201              | Expected, please confirm                                                                              |
-| Light Strip Pro    | 20LAG9901 (10LAG9901)                 | 206              | Expected, please confirm                                                                              |
-| Key Light Neo      | unknown (10LAJ9901)                   | 210              | Uncertain discovery, use the manual address option                                                    |
-| Key Light Air MK.2 | 20LAM9901 (10LAM9901)                 | 214              | Not supported yet, see [#1](https://github.com/passtas/matterbridge-elgato/issues/1)                  |
+| Model              | Model number                          | Type code (`dt`) | Status                                                                               |
+| ------------------ | ------------------------------------- | ---------------- | ------------------------------------------------------------------------------------ |
+| Key Light Air      | 20LAB9901 (10LAB9901)                 | 200              | Verified                                                                             |
+| Light Strip        | 20LAA9901 (10LAA9901)                 | 70               | Verified                                                                             |
+| Key Light          | 20GAK9901 (10GAK9901)                 | 53               | Expected, please confirm                                                             |
+| Key Light MK.2     | unknown (10GAK9901, same as the MK.I) | 205              | Expected, please confirm                                                             |
+| Key Light Mini     | 20LAD9901 (10LAD9901)                 | 202              | Verified; reports its battery                                                        |
+| Ring Light         | 20LAC9901 (10LAC9901)                 | 201              | Expected, please confirm                                                             |
+| Light Strip Pro    | 20LAG9901 (10LAG9901)                 | 206              | Expected, please confirm                                                             |
+| Key Light Neo      | unknown (10LAJ9901)                   | 210              | Uncertain discovery, use the manual address option                                   |
+| Key Light Air MK.2 | 20LAM9901 (10LAM9901)                 | 214              | Not supported yet, see [#1](https://github.com/passtas/matterbridge-elgato/issues/1) |
 
 "Verified" means a light the maintainer owns, tested live and paired to Google
 Home. "Expected" means the model is known to speak the same local HTTP API, but

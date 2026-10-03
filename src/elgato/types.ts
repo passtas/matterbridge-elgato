@@ -75,6 +75,40 @@ export interface LightsSettings {
   switchOnDurationMs: number;
   switchOffDurationMs: number;
   colorChangeDurationMs: number;
+  /**
+   * Only on a light with a battery (the Key Light Mini). Read-only here: the plugin
+   * never writes battery settings. `energySaving.disableWifi: 1` makes the light drop
+   * off the network below `minimumBatteryLevel` (prior art, issue #2; see
+   * docs/troubleshooting.md).
+   */
+  battery?: {
+    energySaving: {
+      enable: number;
+      minimumBatteryLevel: number;
+      disableWifi: number;
+      adjustBrightness: { enable: number; brightness: number };
+    };
+    bypass: number;
+  };
+}
+
+/**
+ * `GET /elgato/battery-info`, Key Light Mini only; every other model answers 404.
+ * Live capture 2026-10-03 (fw 1.0.4 build 240), docs/elgato-protocol.md §3.
+ */
+export interface BatteryInfo {
+  /** `1` power adapter / USB-C, `2` battery, `0` unknown. */
+  powerSource: number;
+  /** Charge in percent, fractional (`78.57`). */
+  level: number;
+  /** `0` not charging, `1` pre-charge, `2` fast charge, `3` complete. */
+  status: number;
+  /** Battery voltage, mV. */
+  currentBatteryVoltage: number;
+  /** USB-C input voltage, mV. */
+  inputChargeVoltage: number;
+  /** Charge current, mA. */
+  inputChargeCurrent: number;
 }
 
 /** Body of a `PUT /elgato/lights`. Partial bodies are the intended usage. */

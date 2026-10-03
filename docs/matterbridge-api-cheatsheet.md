@@ -94,6 +94,31 @@ new MatterbridgeEndpoint([colorTemperatureLight, bridgedNode, powerSource], { id
   .addRequiredClusterServers(); // always last
 ```
 
+**PowerSource on a battery light** (Key Light Mini). Wired and Battery are
+mutually exclusive features of one PowerSource cluster, and the features are
+fixed when the endpoint is built, so swap the Wired helper for the
+rechargeable one rather than adding a second cluster (`src/devices/shared.ts`
+`withPowerSource`). Signature, matterbridge 3.10.8
+(`@matterbridge/core/dist/matterbridgeEndpoint.d.ts:147`):
+
+```ts
+createDefaultPowerSourceRechargeableBatteryClusterServer(
+  batPercentRemaining?: number | null,      // WHOLE percent: the helper doubles it
+  batChargeLevel?: PowerSource.BatChargeLevel,
+  batVoltage?: number | null,               // mV
+  batReplaceability?: PowerSource.BatReplaceability,
+): this;  // features Battery + Rechargeable; batChargeState starts IsNotCharging
+```
+
+Its percent argument is in whole percent and is doubled **without rounding**
+(`matterbridgeEndpointHelpers.js:886-904`), so `96.05` would land as `192.1`.
+Pass an already-rounded half-percent count halved, or `null`. Later writes
+through `updateAttribute(PowerSource.id, "batPercentRemaining", …)` take the
+raw half-percent value, 0–200. The other variants are
+`createDefaultPowerSourceBatteryClusterServer` (Battery only) and
+`createDefaultPowerSourceReplaceableBatteryClusterServer` (Battery +
+Replaceable).
+
 `addRequiredClusterServers()` fills in anything you did not create (servers
 only; `addRequiredClusters()` also adds client clusters – not wanted here), and
 a basic-information helper must run before `registerDevice()`. Then:

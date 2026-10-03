@@ -271,8 +271,9 @@ light has visibly finished changing.
 ### Key Light Mini
 
 `[2026-10-03 · MINI]` One Key Light Mini, fw `1.0.4` (build 240), on 5 GHz
-Wi-Fi on the same Google Nest Wifi mesh, bridge host wired. Read live; **no
-fixtures were captured** for it.
+Wi-Fi on the same Google Nest Wifi mesh, bridge host wired. Read live; no
+fixtures were captured from it. The `key-light-mini-*` files in `test/fixtures/`
+are synthetic, built to these shapes (see [Fixtures](#fixtures)).
 
 What was exercised: `npm run test:live` passed with the Mini as
 `ELGATO_KEY_LIGHT_HOST` (on/off, brightness that never emits 0, color
@@ -320,10 +321,27 @@ Strip). Taken while charging over USB-C:
 
 The shape matches the one
 [#2](https://github.com/passtas/matterbridge-elgato/issues/2) documents from
-prior art. From this one reading only: `powerSource` was `1` on USB-C power,
-`level` is a fractional percent, and `status` was `2` while charging. Other
-values, and the units of the three voltage/current fields, are not established
-here.
+prior art:
+
+| Field                   | Meaning                                                                          |
+| ----------------------- | -------------------------------------------------------------------------------- |
+| `powerSource`           | `1` power adapter / USB-C (live), `2` battery, `0` unknown `[prior-art]`         |
+| `level`                 | charge in percent, **fractional** (live)                                         |
+| `status`                | `0` not charging, `1` pre-charge, `2` fast charge (live), `3` complete           |
+| `currentBatteryVoltage` | battery voltage, mV (live: 3996–4007 while charging)                             |
+| `inputChargeVoltage`    | USB-C input voltage, mV                                                          |
+| `inputChargeCurrent`    | charge current, mA `[prior-art]`                                                 |
+
+Only `status` `2` has been seen live; `0`, `1` and `3` are `[prior-art]`, and
+python-elgato never saw `1`. Treat any `status` not in the table as
+unknown, not as an error. The readings wobble between reads (3997 → 3996 →
+3997 mV and 96.15 → 94.65 → 96.15 % within seconds).
+
+> **Design rule.** Detect a battery by probing `GET /elgato/battery-info` once
+> per device: a 200 means a battery, a 404 means none and is final. Do not
+> switch on `dt` 202 or on `features`. The probe has to finish **before** the
+> Matter endpoint is built, because the PowerSource cluster's feature set
+> (Wired vs Battery) is fixed at that point.
 
 `GET /elgato/lights/settings` is the KLA shape plus a `battery` object
 (`powerOnTemperature` differs only because it is a user setting):
@@ -356,8 +374,7 @@ names, what these fields do is not established; none of them was written.
 > `accessory-info` request timed out at 4 s before a retry succeeded. Too few
 > samples to say how often, and §2's latency table was not repeated on it.
 
-The plugin does not report the battery yet
-([#2](https://github.com/passtas/matterbridge-elgato/issues/2)).
+The plugin reports the battery on the PowerSource cluster (§9).
 
 ---
 
@@ -776,6 +793,31 @@ const toElgatoSat = (s: number): number => round1((clamp(s, 0, 254) * 100) / 254
 Round-trip check: `100 → 254 → 100`; `0 → 0 → 0`; `15 → 38 → 15`;
 `50 → 127 → 50`. Verified: every integer 0–100 round-trips within 0.5.
 
+### PowerSource – battery (Key Light Mini)
+
+`battery-info` maps onto a PowerSource cluster with the Battery and
+Rechargeable features, instead of the Wired one every other light gets:
+
+| Matter attribute      | From                                                                                                    |
+| --------------------- | ------------------------------------------------------------------------------------------------------- |
+| `batPercentRemaining` | `round(level × 2)`, clamped 0–200: **half-percent units**, integer                                      |
+| `batChargeLevel`      | Critical below 10 %, Warning below 20 %, else Ok (Elgato's own default energy-saving threshold is 15 %) |
+| `batChargeState`      | `status` 0 → IsNotCharging, 1 or 2 → IsCharging, 3 → IsAtFullCharge, else Unknown                       |
+| `batVoltage`          | `currentBatteryVoltage` (both mV)                                                                       |
+| `batReplaceability`   | NotReplaceable                                                                                          |
+
+Because the readings wobble (§3, Key Light Mini), the percentage is reported
+at once only when it crosses a threshold or reaches 0 / 100 %; otherwise it
+has to move 1 % or more **and** two consecutive reads have to agree on it
+(within one half-percent step, so a light charging a step per read still
+keeps up). A one-read dip like 96.15 → 94.65 → 96.15 % is never reported. The
+voltage follows a 20 mV move (`batteryUpdate` in `src/mapping.ts`). Charge
+state and level follow at once.
+
+Battery charge does not need the light's poll resolution, so it is read on
+every Nth poll tick (about every 30 s), never on a timer of its own (§2: one
+request at a time).
+
 ### Mode exclusivity
 
 `[prior-art]`, consistent with the schemas observed here: **never send
@@ -823,18 +865,23 @@ const round1 = (v: number) => Math.round(v * 10) / 10;
 
 ## Fixtures
 
-Captured live 2026-09-04, raw device output, in `test/fixtures/`:
+Captured live 2026-09-04, raw device output, in `test/fixtures/`, except the
+three `key-light-mini-*` files, which are synthetic (no capture of the Mini was
+kept, §3). The battery-info sample has the same shape as the live reading in §3:
 
-| File                                 | Source                                            |
-| ------------------------------------ | ------------------------------------------------- |
-| `key-light-air-accessory-info.json`  | `GET /elgato/accessory-info` @ 192.168.1.50       |
-| `key-light-air-lights.json`          | `GET /elgato/lights` (CCT schema 4a)              |
-| `key-light-air-lights-settings.json` | `GET /elgato/lights/settings`                     |
-| `light-strip-accessory-info.json`    | `GET /elgato/accessory-info` @ 192.168.1.51       |
-| `light-strip-lights-scene.json`      | `GET /elgato/lights` (scene schema 4c, "Rainbow") |
-| `light-strip-lights-hsv.json`        | `GET /elgato/lights` (HSV schema 4b)              |
-| `light-strip-lights-settings.json`   | `GET /elgato/lights/settings`                     |
-| `mdns-txt-records.json`              | `avahi-browse -rtp _elg._tcp` + `avahi-resolve`   |
+| File                                  | Source                                            |
+| ------------------------------------- | ------------------------------------------------- |
+| `key-light-air-accessory-info.json`   | `GET /elgato/accessory-info` @ 192.168.1.50       |
+| `key-light-air-lights.json`           | `GET /elgato/lights` (CCT schema 4a)              |
+| `key-light-air-lights-settings.json`  | `GET /elgato/lights/settings`                     |
+| `light-strip-accessory-info.json`     | `GET /elgato/accessory-info` @ 192.168.1.51       |
+| `light-strip-lights-scene.json`       | `GET /elgato/lights` (scene schema 4c, "Rainbow") |
+| `light-strip-lights-hsv.json`         | `GET /elgato/lights` (HSV schema 4b)              |
+| `light-strip-lights-settings.json`    | `GET /elgato/lights/settings`                     |
+| `mdns-txt-records.json`               | `avahi-browse -rtp _elg._tcp` + `avahi-resolve`   |
+| `key-light-mini-battery-info.json`    | published sample (HA fixture, schlarpc RE)        |
+| `key-light-mini-accessory-info.json`  | synthetic: dt 202, fw 1.0.4 build 240             |
+| `key-light-mini-lights-settings.json` | synthetic, with the live `battery` block          |
 
 ---
 

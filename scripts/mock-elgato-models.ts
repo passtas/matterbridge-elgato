@@ -1,11 +1,16 @@
 /**
- * What the two mocked models answer with. Every value here is synthetic but has the
+ * What the mocked models answer with. Every value here is synthetic but has the
  * shape of a real capture, see test/fixtures and docs/elgato-protocol.md §3.
  */
 
-import type { AccessoryInfo, LightState, LightsSettings } from "../src/elgato/types.ts";
+import type {
+  AccessoryInfo,
+  BatteryInfo,
+  LightState,
+  LightsSettings,
+} from "../src/elgato/types.ts";
 
-export type MockModel = "key-light-air" | "light-strip";
+export type MockModel = "key-light-air" | "light-strip" | "key-light-mini";
 
 export interface MockModelProfile {
   info: AccessoryInfo;
@@ -13,6 +18,8 @@ export interface MockModelProfile {
   /** mDNS TXT record, as `bonjour-service` publishes it. */
   txt: Record<string, string>;
   light: LightState;
+  /** `GET /elgato/battery-info`; a model without it answers that path with 404. */
+  battery?: BatteryInfo;
 }
 
 export const MOCK_MODELS: Record<MockModel, MockModelProfile> = {
@@ -77,6 +84,56 @@ export const MOCK_MODELS: Record<MockModel, MockModelProfile> = {
       mf: "Elgato",
     },
     light: { on: 1, hue: 200.0, saturation: 100.0, brightness: 50 },
+  },
+  // The only model with a battery. Same CCT schema and PUT semantics as the Key Light
+  // Air; `lights/settings` gains a `battery` block. Matches test/fixtures/key-light-mini-*.
+  "key-light-mini": {
+    info: {
+      productName: "Elgato Key Light Mini",
+      hardwareBoardType: 202,
+      hardwareRevision: "1",
+      macAddress: "3C:6A:9D:00:00:03",
+      firmwareBuildNumber: 240,
+      firmwareVersion: "1.0.4",
+      serialNumber: "CW43K1A00003",
+      displayName: "Elgato Key Light Mini 7A8B",
+      // No "battery" here on the real Mini either: probe battery-info instead.
+      features: ["lights"],
+      "wifi-info": { ssid: "Example Wi-Fi", frequencyMHz: 2400, rssi: -52 },
+    },
+    settings: {
+      powerOnBehavior: 1,
+      powerOnBrightness: 20,
+      powerOnTemperature: 213,
+      switchOnDurationMs: 100,
+      switchOffDurationMs: 300,
+      colorChangeDurationMs: 100,
+      battery: {
+        energySaving: {
+          enable: 0,
+          minimumBatteryLevel: 15.0,
+          disableWifi: 0,
+          adjustBrightness: { enable: 0, brightness: 10.0 },
+        },
+        bypass: 0,
+      },
+    },
+    txt: {
+      pv: "1.0",
+      md: "Elgato Key Light Mini 20LAD9901",
+      id: "3C:6A:9D:00:00:03",
+      dt: "202",
+      mf: "Elgato",
+    },
+    light: { on: 1, brightness: 30, temperature: 200 },
+    battery: {
+      powerSource: 1,
+      level: 78.57,
+      status: 2,
+      currentBatteryVoltage: 3860,
+      inputChargeVoltage: 4208,
+      inputChargeCurrent: 3008,
+    },
   },
 };
 

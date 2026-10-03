@@ -105,9 +105,7 @@ an mDNS reflector it is the reflector's.
   pinned name.
 - **Key Light Air MK.2 is skipped**, along with anything else that answers with
   the TLS transport. See the section below.
-- **No battery reporting** for the Key Light Mini yet
-  ([#2](https://github.com/passtas/matterbridge-elgato/issues/2)), no Bluetooth,
-  no firmware updates, no Wave audio gear.
+- No Bluetooth, no firmware updates, no Wave audio gear.
 - Two writers at once race silently. The device has no version field to detect it
   with.
 

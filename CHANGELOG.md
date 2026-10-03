@@ -27,6 +27,29 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     one change for overlapping commands is under Fixed. It stays opt-in until a
     release of field reports, because it changes what is stored on the light.
 
+- Key Light Mini battery on Matter (#2). A light that answers
+  `GET /elgato/battery-info` gets the battery (Battery + Rechargeable) variant of
+  the PowerSource cluster instead of the wired one, so Google Home, Apple Home
+  and Alexa can show its charge and warn when it runs low:
+  `batPercentRemaining` (half-percent units), `batChargeLevel` (Warning below
+  20 %, Critical below 10 %), `batChargeState` (charging, full, not charging)
+  and `batVoltage`. The battery is detected by asking that endpoint once per
+  light at startup, not by model code; a 404 is final, so a Key Light Air or a
+  Light Strip costs one request and no log line. Battery values are read on
+  every Nth poll, about every 30 seconds, never on a timer of their own, and a
+  failed battery read never marks the light unreachable. Jitter is not
+  reported: the percentage follows a move of 1 % once two reads in a row agree
+  on it (a threshold crossing, or 0 % / 100 %, at once), the voltage a move of
+  20 mV; charge state and level follow at once.
+  - A Mini that was already paired keeps its endpoint, room and automations;
+    see `docs/troubleshooting.md` if the controller does not show the battery
+    after the upgrade.
+  - A Mini that does not answer the battery probe, or answers it with a 5xx, is
+    not added with a guess: it goes to the retry queue like a light that is
+    off, and is added, battery included, once it answers. After three such
+    tries it is added without a battery, with a warning; a restart asks again.
+  - `npm run mock -- --mini` adds a mock Key Light Mini on port 9126.
+
 ### Changed
 
 - The Light Strip's remembered scene is written to storage only when the scene

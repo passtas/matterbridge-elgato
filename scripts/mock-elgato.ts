@@ -13,9 +13,14 @@
  * bodies, `fault` drops or stalls requests, and `requests` keeps every raw PUT body
  * for byte-level assertions.
  *
- * `npm run mock` starts one of each on ports 9123 and 9124 and advertises them on
- * `_elg._tcp`. Add `--mk2` to also advertise a Key Light Air MK.2, which is the
- * generation this plugin skips (see scripts/mock-elgato-mk2.ts).
+ * The Key Light Mini profile also serves `GET /elgato/battery-info` from `battery`
+ * (every other model answers 404 there, as the real ones do); `batteryFault` breaks
+ * only that path, so a failing battery read can be told apart from a failing light.
+ *
+ * `npm run mock` starts a Key Light Air and a Light Strip on ports 9123 and 9124 and
+ * advertises them on `_elg._tcp`. Add `--mini` to also run a Key Light Mini on 9126,
+ * and `--mk2` to advertise a Key Light Air MK.2 on 9125, which is the generation this
+ * plugin skips (see scripts/mock-elgato-mk2.ts).
  */
 
 import {
@@ -29,7 +34,13 @@ import type { AddressInfo } from "node:net";
 
 import { Bonjour, type Service } from "bonjour-service";
 
-import type { AccessoryInfo, LightPatch, LightState, LightsSettings } from "../src/elgato/types.ts";
+import type {
+  AccessoryInfo,
+  BatteryInfo,
+  LightPatch,
+  LightState,
+  LightsSettings,
+} from "../src/elgato/types.ts";
 import { MOCK_MODELS, type MockModel } from "./mock-elgato-models.ts";
 import { MockKeyLightAirMk2 } from "./mock-elgato-mk2.ts";
 
@@ -73,6 +84,13 @@ export class MockElgatoDevice {
   /** Non-scene state; the Strip falls back to this when a scene is destroyed. */
   light: LightState;
   scene: LightState | undefined;
+  /** What `GET /elgato/battery-info` answers; `undefined` means 404, as on a model without one. */
+  battery: BatteryInfo | undefined;
+  /**
+   * Break only `GET /elgato/battery-info`, leaving the light itself answering: `true`
+   * drops the connection, `500` answers with that status and an error body.
+   */
+  batteryFault: boolean | 500 = false;
   /** Every request seen, for assertions. `body` is the raw PUT body, byte for byte. */
   readonly requests: MockRequest[] = [];
   /**
@@ -105,6 +123,7 @@ export class MockElgatoDevice {
     this.info = { ...profile.info };
     this.settings = { ...profile.settings };
     this.light = { ...profile.light };
+    this.battery = profile.battery ? { ...profile.battery } : undefined;
     this.#instanceName = options.instanceName ?? `Mock ${profile.info.displayName}`;
     this.#listenHost = options.listenHost ?? "127.0.0.1";
   }
@@ -202,6 +221,18 @@ export class MockElgatoDevice {
         case "/elgato/lights/settings":
           this.#json(response, 200, this.settings);
           return;
+        case "/elgato/battery-info":
+          if (this.batteryFault === 500) {
+            this.#json(response, 500, INTERNAL_ERROR);
+          } else if (this.batteryFault) {
+            request.destroy();
+            response.destroy();
+          } else if (this.battery) {
+            this.#json(response, 200, this.battery);
+          } else {
+            this.#notFound(response);
+          }
+          return;
         case "/":
           // The Strip answers an error object with HTTP 200 here; the Key Light Air
           // serves its setup page.
@@ -264,12 +295,12 @@ export class MockElgatoDevice {
       this.#json(response, 400, PARSE_ERROR);
       return;
     }
-    if (this.model === "key-light-air") this.#applyKeyLight(patch);
+    if (this.model !== "light-strip") this.#applyKeyLight(patch);
 
     this.#json(response, 200, { numberOfLights: 1, lights: [this.currentState] });
   }
 
-  /** Key Light Air: out-of-range brightness is ignored in silence, temperature stored as sent. */
+  /** Key Light Air and Mini: out-of-range brightness is ignored in silence, temperature stored as sent. */
   #applyKeyLight(patch: LightPatch): void {
     if (patch.on !== undefined) this.light.on = patch.on ? 1 : 0;
     if (patch.brightness !== undefined && patch.brightness >= 0 && patch.brightness <= 100) {
@@ -348,6 +379,9 @@ if (isMain) {
     new MockElgatoDevice({ model: "key-light-air", port: 9123, advertise: true }),
     new MockElgatoDevice({ model: "light-strip", port: 9124, advertise: true }),
   ];
+  if (process.argv.includes("--mini")) {
+    devices.push(new MockElgatoDevice({ model: "key-light-mini", port: 9126, advertise: true }));
+  }
   const mk2 = process.argv.includes("--mk2")
     ? new MockKeyLightAirMk2({ port: 9125, advertise: true })
     : undefined;
