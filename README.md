@@ -32,7 +32,7 @@ bridge you already paired, with no new pairing step. Right if this is all new.**
 **Ordinary lights in the home app that is already on your phone.**
 
 - **Voice.** "Hey Google, office off" and the Key Light goes dark with the rest
-  of the room. Apple Home / Siri is confirmed too ([#4](https://github.com/passtas/matterbridge-elgato/issues/4#issuecomment-5839396738)); Alexa should behave the same since Matter treats all three alike, and awaits a confirmation in [#4](https://github.com/passtas/matterbridge-elgato/issues/4).
+  of the room. Apple Home and Siri are confirmed too ([#4](https://github.com/passtas/matterbridge-elgato/issues/4#issuecomment-5848208337)); Alexa should behave the same since Matter treats all three alike, and awaits a confirmation in [#4](https://github.com/passtas/matterbridge-elgato/issues/4).
 - **Routines and schedules.** The lights join rooms and automations like any
   other bulb. A sunset routine warms the Key Light and turns the Strip amber with
   nothing in your hand.
@@ -96,21 +96,21 @@ Lights are found on their own over mDNS and filed by serial number, so a changed
 DHCP address moves an entry rather than making a second one. This table is about
 what has been confirmed.
 
-| Model              | Model number                          | Type code (`dt`) | Status                                                                               |
-| ------------------ | ------------------------------------- | ---------------- | ------------------------------------------------------------------------------------ |
-| Key Light Air      | 20LAB9901 (10LAB9901)                 | 200              | Verified                                                                             |
-| Light Strip        | 20LAA9901 (10LAA9901)                 | 70               | Verified                                                                             |
-| Key Light          | 20GAK9901 (10GAK9901)                 | 53               | Expected, please confirm                                                             |
-| Key Light MK.2     | unknown (10GAK9901, same as the MK.I) | 205              | Expected, please confirm                                                             |
-| Key Light Mini     | unknown (10LAD9901)                   | 202              | Expected, please confirm                                                             |
-| Ring Light         | 20LAC9901 (10LAC9901)                 | 201              | Expected, please confirm                                                             |
-| Light Strip Pro    | 20LAG9901 (10LAG9901)                 | 206              | Expected, please confirm                                                             |
-| Key Light Neo      | unknown (10LAJ9901)                   | 210              | Uncertain discovery, use the manual address option                                   |
-| Key Light Air MK.2 | 20LAM9901 (10LAM9901)                 | 214              | Not supported yet, see [#1](https://github.com/passtas/matterbridge-elgato/issues/1) |
+| Model              | Model number                          | Type code (`dt`) | Status                                                                                                |
+| ------------------ | ------------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------- |
+| Key Light Air      | 20LAB9901 (10LAB9901)                 | 200              | Verified                                                                                              |
+| Light Strip        | 20LAA9901 (10LAA9901)                 | 70               | Verified                                                                                              |
+| Key Light          | 20GAK9901 (10GAK9901)                 | 53               | Expected, please confirm                                                                              |
+| Key Light MK.2     | unknown (10GAK9901, same as the MK.I) | 205              | Expected, please confirm                                                                              |
+| Key Light Mini     | 20LAD9901 (10LAD9901)                 | 202              | Verified; battery not reported yet, see [#2](https://github.com/passtas/matterbridge-elgato/issues/2) |
+| Ring Light         | 20LAC9901 (10LAC9901)                 | 201              | Expected, please confirm                                                                              |
+| Light Strip Pro    | 20LAG9901 (10LAG9901)                 | 206              | Expected, please confirm                                                                              |
+| Key Light Neo      | unknown (10LAJ9901)                   | 210              | Uncertain discovery, use the manual address option                                                    |
+| Key Light Air MK.2 | 20LAM9901 (10LAM9901)                 | 214              | Not supported yet, see [#1](https://github.com/passtas/matterbridge-elgato/issues/1)                  |
 
-"Verified" means the two lights this project was built against, tested live and
-paired to Google Home. "Expected" means the model is known to speak the same
-local HTTP API, but nobody has run this plugin against one. The Neo is separate:
+"Verified" means a light the maintainer owns, tested live and paired to Google
+Home. "Expected" means the model is known to speak the same local HTTP API, but
+nobody has run this plugin against one. The Neo is separate:
 owners of other mDNS-based tools report that Control Center finds it while
 third-party clients do not, so add it by address rather than by discovery.
 
@@ -126,17 +126,17 @@ plain HTTP API. If you own an unconfirmed model, a report fills in a row
 heap about 70 MB and flat, no growth.** Read from the Matterbridge frontend's own
 history, for the whole bridge process rather than the plugin alone.
 
-| Piece      | What was tested                                                                           | Status                                                                                                              |
-| ---------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Host       | Beelink EQR6 (Ryzen 7 6800H, 32 GB), Ubuntu 24.04 LTS, x86_64, Docker 29, wired Ethernet  | Confirmed 2026-09-05                                                                                                |
-| Network    | Google Nest Wifi mesh, lights on 2.4 GHz, host wired on the same LAN                      | Confirmed 2026-09-05                                                                                                |
-| Controller | Google Home, Nest hub as the Matter controller                                            | Confirmed 2026-09-05                                                                                                |
-| Lights     | Key Light Air fw 1.0.3, Light Strip fw 1.0.4                                              | Confirmed 2026-09-05                                                                                                |
-| Apple Home | HomePod, HomePod mini and Apple TV 4K as hubs, iOS 27, two Key Light Airs, Debian 12 host | Confirmed 2026-09-25 by [@iSchack](https://github.com/passtas/matterbridge-elgato/issues/4#issuecomment-5839396738) |
-| Alexa      | Echo 4th generation or newer                                                              | Expected, nobody has tried                                                                                          |
-| arm64      | Raspberry Pi or an ARM NAS                                                                | Image builds in CI, unrun                                                                                           |
+| Piece      | What was tested                                                                               | Status                                                                                                              |
+| ---------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| Host       | Beelink EQR6 (Ryzen 7 6800H, 32 GB), Ubuntu 24.04 LTS, x86_64, Docker 29, wired Ethernet      | Confirmed 2026-09-05                                                                                                |
+| Network    | Google Nest Wifi mesh, lights on 2.4 GHz, Key Light Mini on 5 GHz, host wired on the same LAN | Confirmed 2026-09-05, Key Light Mini on 5 GHz 2026-10-03                                                            |
+| Controller | Google Home, Nest hub as the Matter controller                                                | Confirmed 2026-09-05                                                                                                |
+| Lights     | Key Light Air fw 1.0.3, Light Strip fw 1.0.4, Key Light Mini fw 1.0.4                         | Confirmed 2026-09-05, Key Light Mini 2026-10-03                                                                     |
+| Apple Home | HomePod, HomePod mini and Apple TV 4K as hubs, iOS 27, two Key Light Airs, Debian 12 host     | Confirmed 2026-09-25 by [@iSchack](https://github.com/passtas/matterbridge-elgato/issues/4#issuecomment-5839396738) |
+| Alexa      | Echo 4th generation or newer                                                                  | Expected, nobody has tried                                                                                          |
+| arm64      | Raspberry Pi or an ARM NAS                                                                    | Image builds in CI, unrun                                                                                           |
 
-Add yours in [#4](https://github.com/passtas/matterbridge-elgato/issues/4) or open a [Device confirmation report](https://github.com/passtas/matterbridge-elgato/issues/new?template=device_confirmation.yml) (especially for unconfirmed models like Key Light `dt=53`, Key Light MK.2 `dt=205`, Key Light Mini `dt=202`, Ring Light `dt=201`, Light Strip Pro `dt=206`, Key Light Neo `dt=210` `_elg._tcp` mDNS output, Alexa/Home Assistant/SmartThings controllers, or `arm64` hosts).
+Add yours in [#4](https://github.com/passtas/matterbridge-elgato/issues/4) or open a [Device confirmation report](https://github.com/passtas/matterbridge-elgato/issues/new?template=device_confirmation.yml) (especially for unconfirmed models like Key Light `dt=53`, Key Light MK.2 `dt=205`, Ring Light `dt=201`, Light Strip Pro `dt=206`, Key Light Neo `dt=210` `_elg._tcp` mDNS output, Alexa/Home Assistant/SmartThings controllers, or `arm64` hosts).
 
 ## Install with your AI assistant
 
